@@ -50,6 +50,13 @@
         "7.0": 13625
       }
     },
+    "v100_sub_pulse_artifacts": {
+      "count": 1,
+      "timestamps": [
+        "2012-07-15T00:02:00"
+      ],
+      "note": "One-off counter settling onto the 0.5 L pulse grid shortly after the meter swap; all other V100 increments are multiples of 0.5 L."
+    },
     "counter_continuous_at_transition": true,
     "counter_value_before": 86210.947,
     "counter_value_after": 86210.947,
@@ -87,7 +94,8 @@
       "p75": 0.0,
       "p90": 1.0,
       "p95": 5.0,
-      "p99": 17.0
+      "p99": 9.0,
+      "p99.9": 17.0
     },
     "max": 35.0,
     "zero_count": 770073,

@@ -107,6 +107,18 @@ def analyze_transition(df: pd.DataFrame) -> dict:
     transition_row = df.index[df["unix_ts"] >= V100_UNIX_TS][0]
     counter_before = df["counter"].iloc[transition_row - 1]
     counter_after = df["counter"].iloc[transition_row]
+
+    v100_increments = v100["counter"].diff()
+    sub_pulse = v100_increments[(v100_increments > 0) & (v100_increments < 0.5)]
+    sub_pulse_note = {
+        "count": int(len(sub_pulse)),
+        "timestamps": v100.loc[sub_pulse.index, "datetime"].tolist(),
+        "note": (
+            "One-off counter settling onto the 0.5 L pulse grid shortly after the "
+            "meter swap; all other V100 increments are multiples of 0.5 L."
+        ),
+    }
+
     return {
         "v100_unix_ts": V100_UNIX_TS,
         "v100_datetime": df["datetime"].iloc[transition_row],
@@ -114,6 +126,7 @@ def analyze_transition(df: pd.DataFrame) -> dict:
         "rows_kept_from_transition_onward": int(len(v100)),
         "old_meter": pulse_summary(old),
         "v100_meter": pulse_summary(v100),
+        "v100_sub_pulse_artifacts": sub_pulse_note,
         "counter_continuous_at_transition": bool(counter_after >= counter_before),
         "counter_value_before": float(counter_before),
         "counter_value_after": float(counter_after),
@@ -142,7 +155,7 @@ def target_stats(v100: pd.DataFrame) -> dict:
     return {
         "describe": {k: float(v) for k, v in target.describe().items()},
         "quantiles": {
-            f"p{int(q * 100)}": float(target.quantile(q))
+            f"p{q * 100:g}": float(target.quantile(q))
             for q in [0.5, 0.75, 0.9, 0.95, 0.99, 0.999]
         },
         "max": float(target.max()),

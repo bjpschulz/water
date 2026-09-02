@@ -137,19 +137,42 @@ Consumption lags:
 
 ## Immediate next steps
 
-1. Load WHW and timestamps.
-2. Convert `unix_ts` to proper datetime.
-3. Explore WHW distribution, zero-rate proportion and time patterns.
-4. Investigate the 2012 meter-resolution transition, and limit data to after that time
-5. Calculate ACF and identify meaningful lags.
-6. Decide the exact prediction horizon.
+Done so far (results documented in REPORT.md):
+
+1. Load WHW and timestamps; verified a perfect 1-minute grid, no missing values.
+2. Investigated the 2012 meter-resolution transition; data limited to the V100
+   period (`scripts/eda_whw.py` → `data/processed/whw_v100.parquet`).
+3. Explored WHW distribution, zero-rate proportion and time patterns.
+4. Calculated ACF; candidate lag set motivated.
+5. Autocorrelation/feature walkthrough notebook:
+   `notebooks/autocorrelation_and_features.py`.
+
+Next:
+
+6. Finalize the exact prediction horizon (working assumption: one-step-ahead, h=1).
 7. Build chronological train/validation/test splits.
-8. Implement persistence baselines.
-9. Implement first simple ML model.
+8. Implement persistence and previous-day baselines.
+9. Implement first simple ML model (LightGBM as a start).
 10. Run feature-ablation experiments.
 11. Analyze feature importance and residual ACF.
 12. Tune only a small number of meaningful hyperparameters.
 13. Document results reproducibly.
+
+## Living documentation
+
+Keep the documents in sync with the actual project state — they are the source
+of truth for any future session (human or agent):
+
+- Whenever a **decision** is made (e.g., forecasting horizon, split sizes,
+  final feature set, scope changes), update AGENTS.md immediately.
+- Whenever a **measured result** is produced (EDA findings, baseline scores,
+  ablation outcomes), add it to REPORT.md with its exact numbers.
+- Never let the documents contradict the code or the data; if numbers change,
+  update or regenerate them instead of keeping stale values.
+- Preserve the distinction between measured results and hypotheses in both
+  documents.
+- Features/models/scripts that are dropped or replaced must be removed from
+  the documents as well, so scope and documentation stay aligned.
 
 ## Coding principles
 

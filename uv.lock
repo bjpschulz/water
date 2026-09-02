@@ -1214,6 +1214,7 @@ dependencies = [
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "scikit-learn" },
+    { name = "tzdata" },
 ]
 
 [package.metadata]
@@ -1224,6 +1225,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pyarrow", specifier = ">=25.0.1" },
     { name = "scikit-learn", specifier = ">=1.7.2" },
+    { name = "tzdata", specifier = ">=2026.3" },
 ]
 
 [[package]]
