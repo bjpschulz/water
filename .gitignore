@@ -10,3 +10,7 @@ wheels/
 .venv
 
 data/
+
+results/figs/
+notebooks/
+alte_tonne/

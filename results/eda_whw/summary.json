@@ -55,6 +55,9 @@
       "timestamps": [
         "2012-07-15T00:02:00"
       ],
+      "unix_timestamps": [
+        1342310520
+      ],
       "note": "One-off counter settling onto the 0.5 L pulse grid shortly after the meter swap; all other V100 increments are multiples of 0.5 L."
     },
     "counter_continuous_at_transition": true,

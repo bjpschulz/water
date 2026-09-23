@@ -48,7 +48,7 @@ V100_UNIX_TS = 1_342_287_780  # 2012-07-14: documented switch to the V100 water 
 
 # Candidate lags for THIS (1-minute-resolution) analysis only. Chosen to
 # span short-run persistence (1-30 min) up to daily/weekly cycles.
-# NOTE: once the project moves to 15-minute aggregated blocks, this set is
+# NOTE: if the project moves to 15-minute aggregated blocks, this set is to be
 # superseded by a block-resolution lag set (see AGENTS.md) -- it is not
 # reused as-is at the coarser resolution.
 CANDIDATE_LAGS = [1, 5, 15, 30, 60, 1440, 10080]
@@ -140,6 +140,7 @@ def analyze_transition(df: pd.DataFrame) -> dict:
     sub_pulse_note = {
         "count": int(len(sub_pulse)),
         "timestamps": v100.loc[sub_pulse.index, "datetime"].tolist(),
+        "unix_timestamps": v100.loc[sub_pulse.index, "unix_ts"].tolist(),
         "note": (
             "One-off counter settling onto the 0.5 L pulse grid shortly after the "
             "meter swap; all other V100 increments are multiples of 0.5 L."
@@ -183,9 +184,7 @@ def target_stats(target: pd.DataFrame) -> dict:
     """
     Distributional summary of the modelling target (avg_rate) over the
     V100 period: standard descriptive stats, upper-tail quantiles (the
-    distribution is expected to be extremely right-skewed / zero-heavy),
-    and the zero-proportion that motivates the zero-inflation discussion
-    in AGENTS.md.
+    distribution is expected to be extremely right-skewed / zero-heavy).
     """
     return {
         "describe": {k: float(v) for k, v in target.describe().items()},
@@ -218,14 +217,9 @@ def event_stats(target: pd.Series) -> dict:
     active = (target > 0).to_numpy()
     values = target.to_numpy(dtype=np.float64)
 
-    starts, ends = segment_runs(active)
+    starts, ends = segment_runs(active)     # no loop required through this and reduceat
     durations = ends - starts
-    # Volume per event: summing from each event's start up to (but not
-    # including) the *next* event's start gives the same total as summing
-    # strictly start:end for that event, because every minute between one
-    # event's end and the next event's start is zero by construction
-    # (active == False there). This lets us use the fast reduceat form
-    # instead of a per-event Python loop.
+
     volumes = np.add.reduceat(values, starts)
 
     return {
