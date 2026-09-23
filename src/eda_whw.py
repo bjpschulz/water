@@ -10,16 +10,26 @@ at 1-minute lags -- including a split between the "raw" ACF and the ACF of
 the (avg_rate > 0) occurrence indicator, to help separate genuine short-run
 persistence from the trivial "zero tends to follow zero" effect.
 
-These 1-minute-resolution findings motivated the project's decision to
-model at a coarser (15-minute block) resolution instead -- see AGENTS.md,
-"Forecasting Horizon Decision". This script is therefore a *precursor*
-analysis: it documents the problem (zero-inflation, event structure) that
-the horizon decision responds to, not the final modelling resolution.
+The modelling resolution is not yet settled: native 1-minute is the
+working default, with the decision gated on the Stage 2-4 baseline /
+diagnostic comparison (see STATE.md, "Open decision: forecasting
+horizon"). This script therefore measures the 1-minute structure -- an
+input to that decision, not a final modelling choice.
+
+Timezone convention (settled fact, AGENTS.md): unix_ts is true Unix/UTC
+time and the household is in America/Vancouver. The master grid, lags,
+and the stored artifact are keyed by unix_ts (the UTC grid); calendar
+grouping (temporal profiles, calendar figures) and the stored
+datetime_local column use local time. A UTC datetime is derivable from
+unix_ts in one line and is not stored.
 
 Run: uv run python src/eda_whw.py
 
 Outputs:
-  data/processed/whw_v100.parquet   cleaned V100-meter period (1-min grid)
+  data/processed/whw_v100.parquet   cleaned V100 period (1-min grid; index
+                                    unix_ts, columns datetime_local,
+                                    counter, avg_rate)
+  data/processed/whw_v100.csv       identical content as CSV, for inspection
   results/eda_whw/summary.json      all key numbers
   results/eda_whw/figs/*.png        figures
 """
@@ -36,15 +46,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ts_utils import acf_fft, distribution_summary, segment_runs, to_serializable
+from ts_utils import acf_fft, distribution_summary, dst_transitions, segment_runs, to_serializable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = REPO_ROOT / "data" / "Water_WHW.csv"
 PARQUET_PATH = REPO_ROOT / "data" / "processed" / "whw_v100.parquet"
+CSV_PATH = REPO_ROOT / "data" / "processed" / "whw_v100.csv"  # twin of the parquet, for eyeballing
 OUT_DIR = REPO_ROOT / "results" / "eda_whw"
 FIG_DIR = OUT_DIR / "figs"
 
 V100_UNIX_TS = 1_342_287_780  # 2012-07-14: documented switch to the V100 water meter
+
+LOCAL_TZ = "America/Vancouver"
 
 # Candidate lags for THIS (1-minute-resolution) analysis only. Chosen to
 # span short-run persistence (1-30 min) up to daily/weekly cycles.
@@ -58,9 +71,10 @@ SECONDS_PER_MINUTE = 60
 #%%
 
 def load_water() -> pd.DataFrame:
-    """Load the raw water CSV and attach a parsed datetime column, sorted by time."""
+    """Load the raw water CSV and attach tz-aware UTC and local datetime columns, sorted by time."""
     df = pd.read_csv(DATA_PATH)
-    df["datetime"] = pd.to_datetime(df["unix_ts"], unit="s")    # added as last column
+    df["datetime"] = pd.to_datetime(df["unix_ts"], unit="s", utc=True)
+    df["datetime_local"] = df["datetime"].dt.tz_convert(LOCAL_TZ)
     return df.sort_values("unix_ts").reset_index(drop=True)
 
 def check_raw(df: pd.DataFrame) -> dict:
@@ -207,8 +221,8 @@ def event_stats(target: pd.Series) -> dict:
     Characterize discrete water-use "events": contiguous runs of minutes
     with avg_rate > 0, separated by zero-flow gaps.
 
-    This quantifies the event structure referenced in the horizon decision
-    (AGENTS.md, "Forecasting Horizon Decision"): event duration is one of
+    This quantifies the event structure referenced in the open horizon
+    decision (STATE.md): event duration is one of
     the inputs needed to judge whether a candidate aggregation window (e.g.
     15 minutes) is a sensible unit -- too short a window mostly just
     relocates the same zero-inflation problem to a coarser grid, too long
@@ -233,37 +247,34 @@ def event_stats(target: pd.Series) -> dict:
 
 def temporal_profiles(v100: pd.DataFrame) -> dict:
     """
-    Mean avg_rate and nonzero-fraction, grouped by hour-of-day, day-of-week,
-    and weekend/weekday. This is the descriptive counterpart to the
-    calendar features listed as candidates in AGENTS.md.
+    Mean avg_rate and nonzero-fraction, grouped by LOCAL hour-of-day,
+    day-of-week, and weekend/weekday. This is the descriptive counterpart
+    to the calendar features listed as candidates in AGENTS.md.
 
-    NOTE: datetime is derived from unix_ts via pd.to_datetime(unit="s"),
-    which yields UTC, timezone-naive timestamps. Whether AMPds2's unix_ts
-    values represent true UTC or local wall-clock time encoded as UTC has
-    not been confirmed against the dataset's own documentation; if it's the
-    latter and this code implicitly treats it as true UTC, the hour-of-day
-    and day-of-week profiles below would be shifted relative to actual
-    local behavior. Worth checking against the AMPds2 readme before relying
-    on these profiles for feature engineering.
+    Settled fact (AGENTS.md): unix_ts is true Unix/UTC time and the
+    household is in America/Vancouver, so calendar grouping must use
+    datetime_local. Grouping on the UTC-derived hour instead would rotate
+    the diurnal profile by 7-8 hours (the local evening peak lands at
+    "3 am" UTC) and mislabel day-of-week for evening hours.
     """
     target = v100["avg_rate"]
-    out = {}
+    out = {"timezone": LOCAL_TZ}
 
-    hour = v100["datetime"].dt.hour
+    hour = v100["datetime_local"].dt.hour
     g = target.groupby(hour)
     out["hour_of_day"] = {
         "mean": g.mean().tolist(),
         "nonzero_fraction": (target > 0).groupby(hour).mean().tolist(),
     }
 
-    dow = v100["datetime"].dt.dayofweek
+    dow = v100["datetime_local"].dt.dayofweek
     g = target.groupby(dow)
     out["day_of_week"] = {
         "mean": g.mean().tolist(),
         "nonzero_fraction": (target > 0).groupby(dow).mean().tolist(),
     }
 
-    weekend = v100["datetime"].dt.dayofweek >= 5
+    weekend = v100["datetime_local"].dt.dayofweek >= 5
     g = target.groupby(weekend)
     out["weekend"] = {
         "mean": {str(k): float(v) for k, v in g.mean().items()},
@@ -315,8 +326,9 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     Save all diagnostic figures for this EDA to FIG_DIR: target
     distribution (full and nonzero-only), the full time series and a
     one-week zoom, a zoomed view of the meter transition, hour-of-day and
-    day-of-week profiles, and the raw/indicator ACF curves (full range and
-    a 6-hour zoom), with candidate lags marked.
+    day-of-week profiles (America/Vancouver local time), and the raw/
+    indicator ACF curves (full range and a 6-hour zoom), with candidate
+    lags marked.
     """
     target = v100["avg_rate"]
 
@@ -339,8 +351,8 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(14, 5))
-    ax.plot(v100["datetime"], target, linewidth=0.3)
-    ax.set_xlabel("Date")
+    ax.plot(v100["datetime_local"], target, linewidth=0.3)
+    ax.set_xlabel("Date (local time)")
     ax.set_ylabel("avg_rate (L/min)")
     ax.set_title("Whole-house water consumption — V100 period")
     fig.tight_layout()
@@ -351,46 +363,30 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     # above is too dense to make out individual events.
     week = v100.iloc[: 7 * 1440]
     fig, ax = plt.subplots(figsize=(14, 5))
-    ax.plot(week["datetime"], week["avg_rate"], linewidth=0.8)
-    ax.set_xlabel("Date")
+    ax.plot(week["datetime_local"], week["avg_rate"], linewidth=0.8)
+    ax.set_xlabel("Date (local time)")
     ax.set_ylabel("avg_rate (L/min)")
     ax.set_title("First week of the V100 period")
     fig.tight_layout()
     fig.savefig(FIG_DIR / "example_week.png", dpi=150)
     plt.close(fig)
 
-    transition_dt = v100["datetime"].iloc[0]
-    window = df[
-        (df["datetime"] >= transition_dt - pd.Timedelta(hours=2))
-        & (df["datetime"] <= transition_dt + pd.Timedelta(hours=2))
-    ]
-    fig, ax = plt.subplots(figsize=(14, 5))
-    ax.step(window["datetime"], window["avg_rate"], where="post", linewidth=0.8)
-    ax.axvline(transition_dt, color="red", linestyle="--", label="V100 transition")
-    ax.set_xlabel("Time")
-    ax.set_ylabel("avg_rate (L/min)")
-    ax.set_title("Meter transition (old meter has coarser pulses)")
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(FIG_DIR / "transition_zoom.png", dpi=150)
-    plt.close(fig)
-
-    hour = v100["datetime"].dt.hour
+    hour = v100["datetime_local"].dt.hour
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     axes[0].plot(range(24), target.groupby(hour).mean(), marker="o")
-    axes[0].set_xlabel("Hour of day")
+    axes[0].set_xlabel("Hour of day (local)")
     axes[0].set_ylabel("Mean avg_rate (L/min)")
     axes[0].set_xticks(range(0, 24, 2))
     axes[1].plot(range(24), (target > 0).groupby(hour).mean(), marker="o", color="orange")
-    axes[1].set_xlabel("Hour of day")
+    axes[1].set_xlabel("Hour of day (local)")
     axes[1].set_ylabel("Fraction of minutes with consumption")
     axes[1].set_xticks(range(0, 24, 2))
-    fig.suptitle("Hour-of-day profile (V100 period)")
+    fig.suptitle("Hour-of-day profile (V100 period, local time)")
     fig.tight_layout()
     fig.savefig(FIG_DIR / "hour_profile.png", dpi=150)
     plt.close(fig)
 
-    dow = v100["datetime"].dt.dayofweek
+    dow = v100["datetime_local"].dt.dayofweek
     labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     axes[0].plot(range(7), target.groupby(dow).mean(), marker="o")
@@ -399,7 +395,7 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     axes[1].plot(range(7), (target > 0).groupby(dow).mean(), marker="o", color="orange")
     axes[1].set_xticks(range(7), labels)
     axes[1].set_ylabel("Fraction of minutes with consumption")
-    fig.suptitle("Day-of-week profile (V100 period)")
+    fig.suptitle("Day-of-week profile (V100 period, local time)")
     fig.tight_layout()
     fig.savefig(FIG_DIR / "dow_profile.png", dpi=150)
     plt.close(fig)
@@ -439,8 +435,9 @@ def main() -> None:
     """
     Orchestrate the full EDA: load -> validate raw data -> analyze the
     meter transition -> restrict to the V100 period -> compute target
-    statistics, event structure, temporal profiles, and ACF -> write the
-    cleaned parquet, a JSON summary of all numeric results, and figures.
+    statistics, event structure, temporal profiles (local time), ACF, and
+    the timezone/DST documentation -> write the cleaned parquet (+ CSV
+    twin), a JSON summary of all numeric results, and figures.
     """
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     PARQUET_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -457,6 +454,19 @@ def main() -> None:
     events = event_stats(target)
     profiles = temporal_profiles(v100)
     acf = acf_analysis(v100)
+    timezone = {
+        "local_timezone": LOCAL_TZ,
+        "unix_ts_is_true_utc": True,
+        "note": (
+            "Settled fact (AGENTS.md): unix_ts is true Unix/UTC time, not "
+            "local time encoded as UTC. Calendar profiles/features are "
+            "derived in America/Vancouver local time; the master grid and "
+            "lags stay on the UTC/unix_ts grid."
+        ),
+        "dst_transitions_in_v100_window": dst_transitions(
+            int(v100["unix_ts"].iloc[0]), int(v100["unix_ts"].iloc[-1]), LOCAL_TZ
+        ),
+    }
 
     # The raw ACF/indicator curves are large (10081 floats each) and belong
     # in the figures, not in the JSON summary meant for quick inspection --
@@ -467,7 +477,12 @@ def main() -> None:
 
     summary = {
         "dataset": "AMPds2 Water_WHW.csv",
-        "note_unix_ts": "unix_ts interpreted as Unix time; datetimes are UTC-derived and naive",
+        "note_unix_ts": (
+            "unix_ts is true Unix/UTC time (settled fact, AGENTS.md); "
+            "stored datetimes are tz-aware UTC; calendar profiles use "
+            "America/Vancouver local time"
+        ),
+        "timezone": timezone,
         "raw": raw,
         "meter_transition": transition,
         "v100_grid": grid,
@@ -477,6 +492,7 @@ def main() -> None:
         "acf": acf_for_summary,
         "artifacts": {
             "parquet": str(PARQUET_PATH.relative_to(REPO_ROOT)),
+            "csv": str(CSV_PATH.relative_to(REPO_ROOT)),
             "figures_dir": str(FIG_DIR.relative_to(REPO_ROOT)),
         },
     }
@@ -484,15 +500,16 @@ def main() -> None:
     with open(OUT_DIR / "summary.json", "w") as f:
         json.dump(to_serializable(summary), f, indent=2)
 
-    out = v100[["unix_ts", "counter", "avg_rate", "inst_rate"]].copy()
-    out.index = v100["datetime"]
-    out.index.name = "datetime"
+    out = v100[["unix_ts", "datetime_local", "counter", "avg_rate"]].copy()
+    out = out.set_index("unix_ts")  # unique, strictly monotone UTC master grid
     out.to_parquet(PARQUET_PATH)
+    out.to_csv(CSV_PATH)  # identical content, for direct inspection
 
     make_figures(df, v100, acf)
 
     print(json.dumps(to_serializable({k: summary[k] for k in ("raw", "meter_transition", "v100_grid", "target_stats", "events", "acf")}), indent=2))
     print(f"\nWrote {PARQUET_PATH}")
+    print(f"Wrote {CSV_PATH}")
     print(f"Wrote {OUT_DIR / 'summary.json'}")
     print(f"Wrote figures to {FIG_DIR}")
 

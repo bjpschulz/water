@@ -19,16 +19,20 @@ The narrative write-up (why these choices were made, what they mean) is
 the user's own report, written separately and not tracked in either of
 these files.
 
-Last updated: after Phase 4 equivalent work (autocorrelation/feature
-derivation), before Stage 1 (chronological splits).
+Last updated: after the local-time fix and the processed-artifact schema
+settlement in the EDA (calendar profiles/figures in America/Vancouver
+local time; `timezone` block in summary.json; artifact keyed by `unix_ts`
+with columns `datetime_local`, `counter`, `avg_rate`), before Stage 1
+(chronological splits).
 
 ## Where we are
 
 EDA and feature derivation are complete: grid/integrity checks, meter
-transition, target distribution, event structure, temporal profiles, ACF
-(raw + occurrence-indicator), timezone verification, and a leakage-safe
-candidate feature set — all reproducible from `scripts/eda_whw.py` →
-`results/eda_whw/summary.json`.
+transition, target distribution, event structure, temporal profiles
+(America/Vancouver local time), ACF (raw + occurrence-indicator), timezone
+verification (emitted as the `timezone` block in summary.json), and a
+leakage-safe candidate feature set — all reproducible from
+`src/eda_whw.py` → `results/eda_whw/summary.json`.
 
 Stage 1 (chronological train/val/test split) has **not** been built yet.
 No model has been fit. No baseline has been run.
@@ -40,7 +44,9 @@ Next:
    1-minute series (Stage 1). Test set sized to cover full weekly cycles.
 2. Compute naive/rule baselines at 1-minute resolution on the validation
    set (Stage 2): always-zero, always-mean, persistence, seasonal-naive-daily,
-   seasonal-naive-weekly. Save MAE/RMSE reproducibly under `results/`.
+   seasonal-naive-weekly (fixed UTC-minute lag convention, per AGENTS.md
+   Stage 2; log DST-affected minutes). Save MAE/RMSE reproducibly under
+   `results/`.
 3. Fit the diagnostic linear regression and quick LightGBM (Stage 3) using
    calendar + full lag set. Same validation set, same treatment.
 4. Decision point (Stage 4): compare Stage 3 vs Stage 2. Update "Open
