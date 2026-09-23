@@ -26,12 +26,17 @@ unix_ts in one line and is not stored.
 Run: uv run python src/eda_whw.py
 
 Outputs:
-  data/processed/whw_v100.parquet   cleaned V100 period (1-min grid; index
-                                    unix_ts, columns datetime_local,
+  data/processed/whw_v100.parquet   cleaned analysis period (1-min grid;
+                                    index unix_ts, columns datetime_local,
                                     counter, avg_rate)
   data/processed/whw_v100.csv       identical content as CSV, for inspection
   results/eda_whw/summary.json      all key numbers
   results/eda_whw/figs/*.png        figures
+
+The analysis period starts at V100_CLEAN_UNIX_TS, not at the meter-swap
+timestamp: the first V100 minutes contain one sub-pulse counter-settling
+artifact, after which all values sit exactly on the 0.5 L pulse grid. See
+the "clean_start" block in summary.json's meter_transition section.
 """
 
 #%%
@@ -43,6 +48,7 @@ import matplotlib
 matplotlib.use("Agg")  # headless: never try to open a GUI window when run as a script
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 import numpy as np
 import pandas as pd
 
@@ -57,6 +63,12 @@ FIG_DIR = OUT_DIR / "figs"
 
 V100_UNIX_TS = 1_342_287_780  # 2012-07-14: documented switch to the V100 water meter
 
+# First timestamp at which the V100 series is fully settled on the 0.5 L
+# pulse grid: immediately after the swap the counter shows one single
+# sub-pulse increment (< 0.5 L, at unix_ts 1342310520, avg_rate 0.053) as
+# it settles onto the new pulse grid.
+V100_CLEAN_UNIX_TS = 1_342_310_580
+
 LOCAL_TZ = "America/Vancouver"
 
 # Candidate lags for THIS (1-minute-resolution) analysis only. Chosen to
@@ -67,6 +79,7 @@ LOCAL_TZ = "America/Vancouver"
 CANDIDATE_LAGS = [1, 5, 15, 30, 60, 1440, 10080]
 ACF_MAX_LAG = 10080  # one week, in minutes
 SECONDS_PER_MINUTE = 60
+PULSE_SIZE_L = 0.5  # V100 meter pulse size, in liters
 
 #%%
 
@@ -161,9 +174,32 @@ def analyze_transition(df: pd.DataFrame) -> dict:
         ),
     }
 
+    # Everything from V100_CLEAN_UNIX_TS onward must sit exactly on the
+    # 0.5 L pulse grid: verify that claim rather than assume it.
+    settled = df[df["unix_ts"] >= V100_CLEAN_UNIX_TS]
+    settled_increments = settled["counter"].diff()
+    off_grid_counter = int(
+        (settled_increments.dropna() % PULSE_SIZE_L > 1e-9).sum()
+    )
+    off_grid_avg_rate = int((settled["avg_rate"] % PULSE_SIZE_L > 1e-9).sum())
+
     return {
         "v100_unix_ts": V100_UNIX_TS,
         "v100_datetime": df["datetime"].iloc[transition_row],
+        "clean_start_unix_ts": V100_CLEAN_UNIX_TS,
+        "rows_excluded_before_clean_start": int(len(v100[v100["unix_ts"] < V100_CLEAN_UNIX_TS])),
+        "rows_excluded_before_transition": int(len(old)),
+        "rows_kept_from_transition_onward": int(len(v100)),
+        "clean_start": {
+            "note": (
+                "Analysis period and stored artifact start at V100_CLEAN_UNIX_TS, "
+                "the first timestamp after which all values sit on the 0.5 L pulse "
+                "grid; the rows between the meter swap and this point are used only "
+                "to document the transition."
+            ),
+            "off_grid_counter_increments": off_grid_counter,
+            "off_grid_avg_rate_values": off_grid_avg_rate,
+        },
         "rows_excluded_before_transition": int(len(old)),
         "rows_kept_from_transition_onward": int(len(v100)),
         "old_meter": pulse_summary(old),
@@ -180,11 +216,12 @@ def analyze_transition(df: pd.DataFrame) -> dict:
 
 
 def check_v100_grid(v100: pd.DataFrame) -> dict:
-    """Confirm the V100-period subset is itself a clean, gap-free 1-minute grid."""
+    """Confirm the analysis-period subset is itself a clean, gap-free 1-minute grid."""
     diffs = v100["unix_ts"].diff().to_numpy()[1:]
     return {
         "n_rows": len(v100),
         "start": v100["datetime"].iloc[0],
+        "start_unix_ts": int(v100["unix_ts"].iloc[0]),
         "end": v100["datetime"].iloc[-1],
         "regular_1min_grid": bool((diffs == SECONDS_PER_MINUTE).all()),
         "duplicate_unix_ts": int(v100["unix_ts"].duplicated().sum()),
@@ -342,10 +379,19 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.hist(target[target > 0], bins=100)
+    nonzero = target[target > 0]
+    bin_edges = np.arange(
+        PULSE_SIZE_L / 2,
+        nonzero.max() + PULSE_SIZE_L,
+        PULSE_SIZE_L,
+    )
+    ax.hist(nonzero, bins=bin_edges)
     ax.set_xlabel("WHW avg_rate (L/min)")
     ax.set_ylabel("Frequency")
     ax.set_title("Distribution of non-zero WHW avg_rate (V100 period)")
+    ax.xaxis.set_major_locator(MultipleLocator(1.0))
+    ax.xaxis.set_minor_locator(MultipleLocator(PULSE_SIZE_L))
+    ax.set_xlim(0, nonzero.max() + PULSE_SIZE_L / 2)
     fig.tight_layout()
     fig.savefig(FIG_DIR / "hist_nonzero.png", dpi=150)
     plt.close(fig)
@@ -446,7 +492,10 @@ def main() -> None:
     raw = check_raw(df)
     transition = analyze_transition(df)
 
-    v100 = df[df["unix_ts"] >= V100_UNIX_TS].reset_index(drop=True).copy()
+    # Analysis period: the pulse-grid-consistent subset (V100_CLEAN_UNIX_TS
+    # onward); the full V100 window from the meter swap is used only for
+    # the transition analysis above.
+    v100 = df[df["unix_ts"] >= V100_CLEAN_UNIX_TS].reset_index(drop=True).copy()
     grid = check_v100_grid(v100)
 
     target = v100["avg_rate"]

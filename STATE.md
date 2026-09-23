@@ -19,11 +19,11 @@ The narrative write-up (why these choices were made, what they mean) is
 the user's own report, written separately and not tracked in either of
 these files.
 
-Last updated: after the local-time fix and the processed-artifact schema
-settlement in the EDA (calendar profiles/figures in America/Vancouver
-local time; `timezone` block in summary.json; artifact keyed by `unix_ts`
-with columns `datetime_local`, `counter`, `avg_rate`), before Stage 1
-(chronological splits).
+Last updated: after moving the analysis period and stored artifact start
+to the pulse-grid-consistent timestamp 1342310580 (380 minutes after the
+meter swap, past the one sub-pulse settling increment; all values from
+there on are 0 or multiples of 0.5 L), before Stage 1 (chronological
+splits).
 
 ## Where we are
 
