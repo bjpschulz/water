@@ -169,39 +169,5 @@ def main() -> None:
     df.to_parquet(OUT_PARQUET)
     df.to_csv(OUT_CSV)  # identical content, for direct inspection
 
-    summary = {
-        "input_artifact": str(IN_PARQUET.relative_to(REPO_ROOT)),
-        "n_rows": int(len(df)),
-        "n_columns": int(len(df.columns)),
-        "start_unix_ts": int(df.index[0]),
-        "end_unix_ts": int(df.index[-1]),
-        "start_local": df["datetime_local"].iloc[0],
-        "end_local": df["datetime_local"].iloc[-1],
-        "lags_minutes": LAGS,
-        "occurrence_lag_built": False,
-        "warmup_rows_kept": MAX_LAG,
-        "warmup_policy": (
-            f"The first {MAX_LAG} rows have NaN lags and are kept so the table "
-            "spans the full grid; the chronological split must place this tail "
-            "inside the training region (STATE.md known issue)."
-        ),
-        "columns": {c: str(t) for c, t in df.dtypes.items()},
-        "nan_counts": {c: int(n) for c, n in df.isna().sum().items() if n > 0},
-        "checks": checks,
-        "artifacts": {
-            "parquet": str(OUT_PARQUET.relative_to(REPO_ROOT)),
-            "csv": str(OUT_CSV.relative_to(REPO_ROOT)),
-        },
-    }
-
-    with open(OUT_DIR / "summary.json", "w") as f:
-        json.dump(to_serializable(summary), f, indent=2)
-
-    print(json.dumps(to_serializable(summary), indent=2))
-    print(f"\nWrote {OUT_PARQUET}")
-    print(f"Wrote {OUT_CSV}")
-    print(f"Wrote {OUT_DIR / 'summary.json'}")
-
-
 if __name__ == "__main__":
     main()

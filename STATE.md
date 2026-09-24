@@ -15,14 +15,9 @@ deliberately does **not** contain:
 Rules, protocol, and anything that shouldn't change session-to-session
 live in AGENTS.md, not here.
 
-The narrative write-up (why these choices were made, what they mean) is
-the user's own report, written separately and not tracked in either of
-these files.
-
-Last updated: after building the modelling feature table
-(`src/build_features.py` → `data/processed/whw_features_v1.parquet` + CSV
-twin; inventory and self-checks in `results/build_features/summary.json`),
-before Stage 1 (chronological splits).
+Last updated: after building the Stage 1 chronological splits
+(`src/splits.py`, consumed in-memory via `split_series()`), before Stage 2
+(naive baselines).
 
 ## Where we are
 
@@ -35,36 +30,41 @@ leakage-safe candidate feature set — all reproducible from
 
 The feature table itself is now built: lags (1, 5, 15, 30, 60, 1440, 10080)
 plus calendar features in both raw and cyclic encodings (local
-time), warm-up NaN rows kept. Reproducible from `src/build_features.py`;
-per-model-family encoding rationale lives in `FEATURES.md`.
+time), warm-up NaN rows kept. Reproducible from `src/build_features.py`.
 
-Stage 1 (chronological train/val/test split) has **not** been built yet.
+Stage 1 (chronological train/valid/test split) is built in `src/splits.py`:
+Monday-00:00-local-aligned boundaries (~70/15/15), valid/test at full weekly
+cycles, lag warm-up rows excluded from train. Downstream stages must obtain
+splits via `split_series()` — never re-derive boundaries.
+
 No model has been fit. No baseline has been run.
 
 ## Immediate next steps
 
 Next:
-1. Build chronological train/validation/test splits on the V100-period
-   1-minute series (Stage 1), operating on
-   `data/processed/whw_features_v1.parquet`. Test set sized to cover full
-   weekly cycles; the lag warm-up NaN tail must land inside train (see
-   known issue below).
-2. Compute naive/rule baselines at 1-minute resolution on the validation
-   set (Stage 2): always-zero, always-mean, persistence, seasonal-naive-daily,
-   seasonal-naive-weekly (fixed UTC-minute lag convention, per AGENTS.md
-   Stage 2). Save MAE/RMSE reproducibly under `results/`.
-3. Fit the diagnostic linear regression and quick LightGBM (Stage 3) using
-   calendar + full lag set. Same validation set, same treatment.
-4. Decision point (Stage 4): compare Stage 3 vs Stage 2. Update "Open
+1. Compute naive/rule baselines at 1-minute resolution on the validation
+   set (Stage 2), in a new `src/baselines.py` importing `load_features` /
+   `split_series` from `src/splits.py`: always-zero, always-mean (train
+   mean), persistence, seasonal-naive-daily, seasonal-naive-weekly (fixed
+   UTC-minute lag convention, per AGENTS.md Stage 2). Baselines needing
+   history before valid's first row (persistence, seasonal-naive) get it by
+   concatenating train+valid — contiguous by construction. Save MAE/RMSE
+   reproducibly under `results/`.
+2. Fit the diagnostic linear regression and quick LightGBM (Stage 3) using
+   calendar + full lag set. Same validation set, same treatment. Train on
+   the train split as-is (warm-up NaN rows already excluded by Stage 1).
+   Note: `lightgbm` is not yet a dependency — add it to `pyproject.toml`
+   when this step starts.
+3. Decision point (Stage 4): compare Stage 3 vs Stage 2. Update "Open
    decision" below to "decided" with the actual numbers, then migrate it
    to AGENTS.md's settled-facts list.
-5. Depending on step 4: proceed with full modeling at 1-minute resolution,
+4. Depending on step 3: proceed with full modeling at 1-minute resolution,
    or revisit Option A/B below with measured justification.
-6. Run the feature-group ablation (calendar / +recent lags /
+5. Run the feature-group ablation (calendar / +recent lags /
    +daily-weekly lags / full) at the settled resolution.
-7. Analyze feature importance and residual ACF.
-8. Tune a small number of meaningful hyperparameters.
-9. Document results reproducibly under `results/`.
+6. Analyze feature importance and residual ACF.
+7. Tune a small number of meaningful hyperparameters.
+8. Document results reproducibly under `results/`.
 
 ## Open decision: forecasting horizon / resolution
 
@@ -136,11 +136,9 @@ Deliberately excluded: rolling statistics (AGENTS.md "Settled facts &
 scope decisions") and weather (scope, per AGENTS.md Research Constraints —
 never part of the candidate set).
 
-**Known issue for the modeling pipeline:** `lag_10080` produces a 7-day
-warm-up NaN tail (10,080 rows), stored in the feature table rather than
-dropped (counts verified in `results/build_features/summary.json`). The
-chronological split must place that tail inside the training region, never
-at a split boundary.
+The former "known issue" about the `lag_10080` warm-up NaN tail is
+resolved: the Stage 1 split (`src/splits.py`) excludes it from train, so no
+split contains NaN lag features.
 
 ## Evaluation metric — open item
 
