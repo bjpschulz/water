@@ -96,8 +96,7 @@ except to correct an error.
   swap (no reset). (`src/eda_whw.py` → `meter_transition` in
   `summary.json`.)
 - **`unix_ts` is true Unix/UTC time**, not local time encoded as UTC.
-  Derived local timezone is America/Vancouver (4 DST transitions inside
-  the V100 window). Do not treat the naive UTC-derived hour-of-day as
+  Derived local timezone is America/Vancouver. Do not treat the naive UTC-derived hour-of-day as
   local time when building calendar features.
   Reproducible via the `timezone` block in `results/eda_whw/summary.json`
   (`src/eda_whw.py`).
@@ -180,11 +179,7 @@ data. Save results reproducibly under `results/` (per Coding principles).
 
 Seasonal-naive convention (settled): fixed UTC-minute lags (`t-1440`,
 `t-10080`) — DST clock changes are deliberately ignored, matching the
-minute-based lag set and the textbook MASE definition. Log how many
-validation/test minutes are DST-affected (the 1440/10080 minutes
-following each clock change; see `timezone.dst_transitions_in_v100_window`
-in `results/eda_whw/summary.json`); compute a local-wall-clock-aligned
-lag variant only as a sensitivity check, never as the primary.
+minute-based lag set and the textbook MASE definition.
 
 ### Stage 3 — Diagnostic model (1-minute resolution, small/fast, not the final model)
 

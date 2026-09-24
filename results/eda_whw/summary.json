@@ -1,44 +1,9 @@
 {
   "dataset": "AMPds2 Water_WHW.csv",
-  "note_unix_ts": "unix_ts is true Unix/UTC time (settled fact, AGENTS.md); stored datetimes are tz-aware UTC; calendar profiles use America/Vancouver local time",
+  "note_unix_ts": "unix_ts is true Unix/UTC time; stored datetimes are tz-aware UTC; calendar profiles use America/Vancouver local time",
   "timezone": {
     "local_timezone": "America/Vancouver",
-    "unix_ts_is_true_utc": true,
-    "note": "Settled fact (AGENTS.md): unix_ts is true Unix/UTC time, not local time encoded as UTC. Calendar profiles/features are derived in America/Vancouver local time; the master grid and lags stay on the UTC/unix_ts grid.",
-    "dst_transitions_in_v100_window": [
-      {
-        "unix_ts": 1352019600,
-        "utc": "2012-11-04T09:00:00+00:00",
-        "local": "2012-11-04T01:00:00-08:00",
-        "offset_before_hours": -7.0,
-        "offset_after_hours": -8.0,
-        "clock_shift_hours": -1.0
-      },
-      {
-        "unix_ts": 1362909600,
-        "utc": "2013-03-10T10:00:00+00:00",
-        "local": "2013-03-10T03:00:00-07:00",
-        "offset_before_hours": -8.0,
-        "offset_after_hours": -7.0,
-        "clock_shift_hours": 1.0
-      },
-      {
-        "unix_ts": 1383469200,
-        "utc": "2013-11-03T09:00:00+00:00",
-        "local": "2013-11-03T01:00:00-08:00",
-        "offset_before_hours": -7.0,
-        "offset_after_hours": -8.0,
-        "clock_shift_hours": -1.0
-      },
-      {
-        "unix_ts": 1394359200,
-        "utc": "2014-03-09T10:00:00+00:00",
-        "local": "2014-03-09T03:00:00-07:00",
-        "offset_before_hours": -8.0,
-        "offset_after_hours": -7.0,
-        "clock_shift_hours": 1.0
-      }
-    ]
+    "unix_ts_is_true_utc": true
   },
   "raw": {
     "n_rows": 1051200,
@@ -174,6 +139,57 @@
     "mean_events_per_day": 78.34290112247992,
     "active_minute_proportion": 0.14518051080777017
   },
+  "daily_volume": {
+    "volume_L": {
+      "count": 625,
+      "mean": 812.2912,
+      "median": 792.5,
+      "p90": 1055.2,
+      "p99": 1454.6599999999999,
+      "max": 2290.5
+    },
+    "lowest_days_L": {
+      "2013-08-03": 0.0,
+      "2013-08-04": 30.5,
+      "2013-08-02": 137.0,
+      "2013-08-07": 155.0,
+      "2013-08-06": 202.0
+    },
+    "highest_days_L": {
+      "2013-07-08": 2290.5,
+      "2013-07-19": 2095.5,
+      "2012-08-03": 2025.5,
+      "2013-07-07": 1977.0,
+      "2013-07-20": 1731.0
+    }
+  },
+  "longest_zero_runs": [
+    {
+      "duration_minutes": 3122,
+      "start_local": "2013-08-02T16:29:00-07:00",
+      "end_local": "2013-08-04T20:30:00-07:00"
+    },
+    {
+      "duration_minutes": 639,
+      "start_local": "2013-08-04T23:37:00-07:00",
+      "end_local": "2013-08-05T10:15:00-07:00"
+    },
+    {
+      "duration_minutes": 603,
+      "start_local": "2012-11-10T21:36:00-08:00",
+      "end_local": "2012-11-11T07:38:00-08:00"
+    },
+    {
+      "duration_minutes": 585,
+      "start_local": "2013-12-18T23:32:00-08:00",
+      "end_local": "2013-12-19T09:16:00-08:00"
+    },
+    {
+      "duration_minutes": 547,
+      "start_local": "2012-11-29T22:59:00-08:00",
+      "end_local": "2012-11-30T08:05:00-08:00"
+    }
+  ],
   "temporal_profiles": {
     "timezone": "America/Vancouver",
     "hour_of_day": {

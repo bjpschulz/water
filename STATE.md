@@ -45,8 +45,7 @@ Next:
 2. Compute naive/rule baselines at 1-minute resolution on the validation
    set (Stage 2): always-zero, always-mean, persistence, seasonal-naive-daily,
    seasonal-naive-weekly (fixed UTC-minute lag convention, per AGENTS.md
-   Stage 2; log DST-affected minutes). Save MAE/RMSE reproducibly under
-   `results/`.
+   Stage 2). Save MAE/RMSE reproducibly under `results/`.
 3. Fit the diagnostic linear regression and quick LightGBM (Stage 3) using
    calendar + full lag set. Same validation set, same treatment.
 4. Decision point (Stage 4): compare Stage 3 vs Stage 2. Update "Open

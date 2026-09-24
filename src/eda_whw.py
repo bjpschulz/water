@@ -52,7 +52,7 @@ from matplotlib.ticker import MultipleLocator
 import numpy as np
 import pandas as pd
 
-from ts_utils import acf_fft, distribution_summary, dst_transitions, segment_runs, to_serializable
+from ts_utils import acf_fft, distribution_summary, segment_runs, to_serializable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = REPO_ROOT / "data" / "Water_WHW.csv"
@@ -288,7 +288,7 @@ def temporal_profiles(v100: pd.DataFrame) -> dict:
     day-of-week, and weekend/weekday. This is the descriptive counterpart
     to the calendar features listed as candidates in AGENTS.md.
 
-    Settled fact (AGENTS.md): unix_ts is true Unix/UTC time and the
+    unix_ts is true Unix/UTC time and the
     household is in America/Vancouver, so calendar grouping must use
     datetime_local. Grouping on the UTC-derived hour instead would rotate
     the diurnal profile by 7-8 hours (the local evening peak lands at
@@ -322,6 +322,49 @@ def temporal_profiles(v100: pd.DataFrame) -> dict:
     return out
 
 
+def daily_volumes(v100: pd.DataFrame) -> pd.Series:
+    """
+    Total volume (L) per LOCAL calendar day.
+    The first day is dropped.
+
+    tz_localize(None) drops the tz label but keeps the local wall time, so
+    flooring to "D" gives one unique key per local calendar day.
+    """
+    local_day = v100["datetime_local"].dt.tz_localize(None).dt.floor("D")
+    return v100["avg_rate"].groupby(local_day).sum().iloc[1:]
+
+
+def daily_volume_stats(daily: pd.Series) -> dict:
+    """
+    Distribution of daily volume plus the 5 lowest and 5 highest days.
+    Purely descriptive: it shows where atypical days are, not why.
+    """
+    return {
+        "volume_L": distribution_summary(daily.to_numpy()),
+        "lowest_days_L": {str(d.date()): float(v) for d, v in daily.nsmallest(5).items()},
+        "highest_days_L": {str(d.date()): float(v) for d, v in daily.nlargest(5).items()},
+    }
+
+
+def longest_zero_runs(v100: pd.DataFrame) -> list:
+    """
+    The 5 longest runs of consecutive zero-flow minutes, with local start/end.
+    Ordinary overnight lulls are ~9-10 h; a run far beyond that means nobody
+    used water for a long stretch.
+    """
+    starts, ends = segment_runs((v100["avg_rate"] == 0).to_numpy())
+    lengths = ends - starts
+    local = v100["datetime_local"]
+    return [
+        {
+            "duration_minutes": int(lengths[i]),
+            "start_local": local.iloc[starts[i]],
+            "end_local": local.iloc[ends[i] - 1],
+        }
+        for i in np.argsort(-lengths, kind="stable")[:5]
+    ]
+
+
 def acf_analysis(v100: pd.DataFrame) -> dict:
     """
     Compute two autocorrelation curves at 1-minute resolution, up to
@@ -333,7 +376,7 @@ def acf_analysis(v100: pd.DataFrame) -> dict:
     The comparison matters for interpreting the raw ACF correctly: because
     avg_rate is heavily zero-inflated, a large share of the raw ACF(1) can
     come simply from "a zero minute tends to be followed by another zero
-    minute" (a mechanical consequence of sparsity), rather than from
+    minute" (consequence of sparsity), rather than from
     genuine short-run persistence in ongoing water-use events. Computing
     the indicator ACF separately lets us see how much of the raw
     autocorrelation is attributable to occurrence patterns alone.
@@ -358,15 +401,10 @@ def acf_analysis(v100: pd.DataFrame) -> dict:
     }
 
 
-def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None:
-    """
-    Save all diagnostic figures for this EDA to FIG_DIR: target
-    distribution (full and nonzero-only), the full time series and a
-    one-week zoom, a zoomed view of the meter transition, hour-of-day and
-    day-of-week profiles (America/Vancouver local time), and the raw/
-    indicator ACF curves (full range and a 6-hour zoom), with candidate
-    lags marked.
-    """
+def make_figures(
+    df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict, daily: pd.Series
+) -> None:
+    """ Save all diagnostic figures for this EDA to FIG_DIR """
     target = v100["avg_rate"]
 
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -378,6 +416,7 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     fig.savefig(FIG_DIR / "hist_all.png", dpi=150)
     plt.close(fig)
 
+    # nonzero histogram is more informative than the full histogram
     fig, ax = plt.subplots(figsize=(10, 5))
     nonzero = target[target > 0]
     bin_edges = np.arange(
@@ -396,6 +435,7 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     fig.savefig(FIG_DIR / "hist_nonzero.png", dpi=150)
     plt.close(fig)
 
+    # minutely time series plot
     fig, ax = plt.subplots(figsize=(14, 5))
     ax.plot(v100["datetime_local"], target, linewidth=0.3)
     ax.set_xlabel("Date (local time)")
@@ -405,8 +445,26 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     fig.savefig(FIG_DIR / "timeseries_v100.png", dpi=150)
     plt.close(fig)
 
-    # First week only, for a human-readable zoom -- the full-period plot
-    # above is too dense to make out individual events.
+    # daily totals - level shifts, absences and unusually heavy-use days mroe visible 
+    # also 7-day centered mean for display
+    fig, ax = plt.subplots(figsize=(14, 5))
+    ax.plot(daily.index, daily, linewidth=0.8, label="Daily volume")
+    ax.plot(
+        daily.index,
+        daily.rolling(7, center=True).mean(),
+        linewidth=1.8,
+        color="red",
+        label="7-day centered mean",
+    )
+    ax.set_xlabel("Date (local time)")
+    ax.set_ylabel("Volume per day (L)")
+    ax.set_title("Whole-house water consumption, daily volume — V100 period")
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+    fig.savefig(FIG_DIR / "daily_volume_v100.png", dpi=150)
+    plt.close(fig)
+
+    # First week plot, kinda useless
     week = v100.iloc[: 7 * 1440]
     fig, ax = plt.subplots(figsize=(14, 5))
     ax.plot(week["datetime_local"], week["avg_rate"], linewidth=0.8)
@@ -417,6 +475,7 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     fig.savefig(FIG_DIR / "example_week.png", dpi=150)
     plt.close(fig)
 
+    # THIS is much better
     hour = v100["datetime_local"].dt.hour
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     axes[0].plot(range(24), target.groupby(hour).mean(), marker="o")
@@ -432,6 +491,7 @@ def make_figures(df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict) -> None
     fig.savefig(FIG_DIR / "hour_profile.png", dpi=150)
     plt.close(fig)
 
+    # Interesting Mondays
     dow = v100["datetime_local"].dt.dayofweek
     labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -481,9 +541,9 @@ def main() -> None:
     """
     Orchestrate the full EDA: load -> validate raw data -> analyze the
     meter transition -> restrict to the V100 period -> compute target
-    statistics, event structure, temporal profiles (local time), ACF, and
-    the timezone/DST documentation -> write the cleaned parquet (+ CSV
-    twin), a JSON summary of all numeric results, and figures.
+    statistics, event structure, daily volumes and zero-flow runs,
+    temporal profiles (local time), ACF, and the timezone note -> write the
+    cleaned parquet (+ CSV twin), a JSON summary of all numeric results, and figures.
     """
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     PARQUET_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -503,18 +563,11 @@ def main() -> None:
     events = event_stats(target)
     profiles = temporal_profiles(v100)
     acf = acf_analysis(v100)
+    daily = daily_volumes(v100)
+    daily_stats = daily_volume_stats(daily)
     timezone = {
         "local_timezone": LOCAL_TZ,
         "unix_ts_is_true_utc": True,
-        "note": (
-            "Settled fact (AGENTS.md): unix_ts is true Unix/UTC time, not "
-            "local time encoded as UTC. Calendar profiles/features are "
-            "derived in America/Vancouver local time; the master grid and "
-            "lags stay on the UTC/unix_ts grid."
-        ),
-        "dst_transitions_in_v100_window": dst_transitions(
-            int(v100["unix_ts"].iloc[0]), int(v100["unix_ts"].iloc[-1]), LOCAL_TZ
-        ),
     }
 
     # The raw ACF/indicator curves are large (10081 floats each) and belong
@@ -527,7 +580,7 @@ def main() -> None:
     summary = {
         "dataset": "AMPds2 Water_WHW.csv",
         "note_unix_ts": (
-            "unix_ts is true Unix/UTC time (settled fact, AGENTS.md); "
+            "unix_ts is true Unix/UTC time; "
             "stored datetimes are tz-aware UTC; calendar profiles use "
             "America/Vancouver local time"
         ),
@@ -537,6 +590,8 @@ def main() -> None:
         "v100_grid": grid,
         "target_stats": stats,
         "events": events,
+        "daily_volume": daily_stats,
+        "longest_zero_runs": longest_zero_runs(v100),
         "temporal_profiles": profiles,
         "acf": acf_for_summary,
         "artifacts": {
@@ -554,9 +609,9 @@ def main() -> None:
     out.to_parquet(PARQUET_PATH)
     out.to_csv(CSV_PATH)  # identical content, for direct inspection
 
-    make_figures(df, v100, acf)
+    make_figures(df, v100, acf, daily)
 
-    print(json.dumps(to_serializable({k: summary[k] for k in ("raw", "meter_transition", "v100_grid", "target_stats", "events", "acf")}), indent=2))
+    print(json.dumps(to_serializable({k: summary[k] for k in ("raw", "meter_transition", "v100_grid", "target_stats", "events", "daily_volume", "longest_zero_runs", "acf")}), indent=2))
     print(f"\nWrote {PARQUET_PATH}")
     print(f"Wrote {CSV_PATH}")
     print(f"Wrote {OUT_DIR / 'summary.json'}")
