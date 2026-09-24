@@ -23,7 +23,7 @@ grouping (temporal profiles, calendar figures) and the stored
 datetime_local column use local time. A UTC datetime is derivable from
 unix_ts in one line and is not stored.
 
-Run: uv run python src/eda_whw.py
+Run: uv run python src/initial_eda.py
 
 Outputs:
   data/processed/whw_v100.parquet   cleaned analysis period (1-min grid;

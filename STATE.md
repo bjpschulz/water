@@ -19,11 +19,10 @@ The narrative write-up (why these choices were made, what they mean) is
 the user's own report, written separately and not tracked in either of
 these files.
 
-Last updated: after moving the analysis period and stored artifact start
-to the pulse-grid-consistent timestamp 1342310580 (380 minutes after the
-meter swap, past the one sub-pulse settling increment; all values from
-there on are 0 or multiples of 0.5 L), before Stage 1 (chronological
-splits).
+Last updated: after building the modelling feature table
+(`src/build_features.py` → `data/processed/whw_features_v1.parquet` + CSV
+twin; inventory and self-checks in `results/build_features/summary.json`),
+before Stage 1 (chronological splits).
 
 ## Where we are
 
@@ -32,7 +31,12 @@ transition, target distribution, event structure, temporal profiles
 (America/Vancouver local time), ACF (raw + occurrence-indicator), timezone
 verification (emitted as the `timezone` block in summary.json), and a
 leakage-safe candidate feature set — all reproducible from
-`src/eda_whw.py` → `results/eda_whw/summary.json`.
+`src/initial_eda.py` → `results/eda_whw/summary.json`.
+
+The feature table itself is now built: lags (1, 5, 15, 30, 60, 1440, 10080)
+plus calendar features in both raw and cyclic encodings (local
+time), warm-up NaN rows kept. Reproducible from `src/build_features.py`;
+per-model-family encoding rationale lives in `FEATURES.md`.
 
 Stage 1 (chronological train/val/test split) has **not** been built yet.
 No model has been fit. No baseline has been run.
@@ -41,7 +45,10 @@ No model has been fit. No baseline has been run.
 
 Next:
 1. Build chronological train/validation/test splits on the V100-period
-   1-minute series (Stage 1). Test set sized to cover full weekly cycles.
+   1-minute series (Stage 1), operating on
+   `data/processed/whw_features_v1.parquet`. Test set sized to cover full
+   weekly cycles; the lag warm-up NaN tail must land inside train (see
+   known issue below).
 2. Compute naive/rule baselines at 1-minute resolution on the validation
    set (Stage 2): always-zero, always-mean, persistence, seasonal-naive-daily,
    seasonal-naive-weekly (fixed UTC-minute lag convention, per AGENTS.md
@@ -108,23 +115,32 @@ this section's content, don't append to it.
 
 Current, still subject to change by the Stage 5+ ablation. Every feature
 uses only information from `t-1` or earlier (leakage-safe shift semantics).
+Items 1, 2, and 4 are built into `data/processed/whw_features_v1.parquet`
+(`src/build_features.py`); item 3 is not built yet. Encoding rationale per
+model family: `FEATURES.md`.
 
 In priority order, each justified by a measurement in `results/eda_whw/summary.json`:
 
 1. Recent consumption lags: `lag_1, lag_5, lag_15, lag_30, lag_60`
-   (ACF decay region + event durations)
-2. Daily/weekly lags: `lag_1440, lag_10080` (24h/168h ACF bumps)
+   (ACF decay region + event durations) — built
+2. Daily/weekly lags: `lag_1440, lag_10080` (24h/168h ACF bumps) — built
 3. Occurrence lag: `occ_lag_1` (indicator ACF decays slower than raw ACF
-   in the 15–60 min range — motivates tracking occurrence separately)
-4. Calendar: `hour_sin, hour_cos` (diurnal profile, local time),
-   `dow_local, weekend` (cheap; expected weak relative to hour-of-day)
+   in the 15–60 min range — motivates tracking occurrence separately) —
+   deferred, not yet in the feature table
+4. Calendar: `hour, hour_sin, hour_cos` (diurnal profile, local time),
+   `dow_local, dow_sin, dow_cos, weekend` (cheap; expected weak relative
+   to hour-of-day) — built; raw ints for tree models, sin/cos for the
+   linear benchmark (FEATURES.md)
 
-Deliberately excluded: rolling statistics, weather — see AGENTS.md
-"Settled facts & scope decisions" for why.
+Deliberately excluded: rolling statistics (AGENTS.md "Settled facts &
+scope decisions") and weather (scope, per AGENTS.md Research Constraints —
+never part of the candidate set).
 
 **Known issue for the modeling pipeline:** `lag_10080` produces a 7-day
-warm-up NaN tail (10,080 rows). The chronological split must place that
-tail inside the training region, never at a split boundary.
+warm-up NaN tail (10,080 rows), stored in the feature table rather than
+dropped (counts verified in `results/build_features/summary.json`). The
+chronological split must place that tail inside the training region, never
+at a split boundary.
 
 ## Evaluation metric — open item
 
