@@ -51,8 +51,9 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 import numpy as np
 import pandas as pd
+from statsmodels.tsa.stattools import acf as sm_acf  # aliased: acf_analysis uses a local variable named acf
 
-from ts_utils import acf_fft, distribution_summary, segment_runs, to_serializable
+from ts_utils import distribution_summary, segment_runs, to_serializable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = REPO_ROOT / "data" / "Water_WHW.csv"
@@ -382,9 +383,9 @@ def acf_analysis(v100: pd.DataFrame) -> dict:
     autocorrelation is attributable to occurrence patterns alone.
     """
     target = v100["avg_rate"].to_numpy(dtype=np.float64)
-    acf = acf_fft(target, ACF_MAX_LAG)
+    acf = sm_acf(target, nlags=ACF_MAX_LAG, fft=True)
     indicator = (target > 0).astype(np.float64)
-    acf_ind = acf_fft(indicator, ACF_MAX_LAG)
+    acf_ind = sm_acf(indicator, nlags=ACF_MAX_LAG, fft=True)
 
     def at_lags(a):
         out = {}
@@ -525,12 +526,15 @@ def make_figures(
     axes[1, 1].plot(lags[: zoom + 1], ind_curve[: zoom + 1], linewidth=0.8, color="orange")
     axes[1, 1].set_ylabel("ACF of (avg_rate > 0)")
     axes[1, 1].set_title("Zoom: first 6 hours")
-    for ax in axes.flat:
-        ax.axhline(0, color="black", linewidth=0.5)
-        ax.set_xlabel("Lag (minutes)")
-        for lag in CANDIDATE_LAGS:
-            if lag <= ACF_MAX_LAG:
-                ax.axvline(lag, color="red", linestyle=":", alpha=0.4)
+    for col, x_max in enumerate([ACF_MAX_LAG, zoom]):
+        for ax in axes[:, col]:
+            ax.axhline(0, color="black", linewidth=0.5)
+            ax.set_xlabel("Lag (minutes)")
+            for lag in CANDIDATE_LAGS:
+                if lag <= x_max:  # only mark lags inside this panel's range
+                    ax.axvline(lag, color="red", linestyle=":", alpha=0.4)
+    for ax in axes[:, 1]:
+        ax.set_xlim(0, zoom)  # axvline would otherwise stretch the zoom to the full lag range
     fig.suptitle("Autocorrelation (V100 period); red lines: candidate lags")
     fig.tight_layout()
     fig.savefig(FIG_DIR / "acf.png", dpi=150)

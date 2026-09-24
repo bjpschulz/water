@@ -2,14 +2,10 @@
 Small, reusable time-series utilities shared across scripts in this project.
 
 Kept separate from any single analysis script (e.g. eda_whw.py) so that
-functions used in more than one place -- the FFT-based ACF, the boolean
-run-length segmentation used for event/gap detection, and the DST-transition
-scan used by the timezone documentation and the seasonal-naive baseline
-logging -- have a single implementation, instead of being copy-pasted
-between scripts and risking drift. The ACF in particular is expected to be
-reused if the open horizon decision (STATE.md) moves modeling to a coarser
-resolution, where it would be recomputed on the resampled series using the
-same method as the original 1-minute EDA.
+functions used in more than one place -- the boolean run-length segmentation
+used for event/gap detection, the per-run summary statistics, and JSON
+serialization -- have a single implementation, instead of being copy-pasted
+between scripts and risking drift.
 """
 
 import numpy as np
@@ -38,34 +34,6 @@ def to_serializable(obj):
     if isinstance(obj, (pd.Timestamp,)):
         return obj.isoformat()
     return obj
-
-
-def acf_fft(x: np.ndarray, max_lag: int) -> np.ndarray:
-    """
-    Compute the sample autocorrelation function of x for lags 0..max_lag,
-    using an FFT-based autocovariance instead of a direct/naive lag loop.
-
-    Why FFT: computing the autocovariance directly at every lag up to
-    max_lag is O(n * max_lag); for this project n ~ 1e6 rows and
-    max_lag = 10080 (one week of 1-minute data), which would be far too
-    slow. The FFT approach computes the full autocovariance in O(n log n)
-    by zero-padding to at least 2n - 1 samples (avoiding circular-
-    correlation wraparound) and using the convolution theorem: the
-    autocovariance is the convolution of the mean-centered series with its
-    own time-reversal, which the FFT computes efficiently.
-
-    Returns the *normalized* ACF (acf[0] == 1.0 whenever the series has
-    nonzero variance; an all-constant series returns all zeros rather than
-    dividing by zero).
-    """
-    x = np.asarray(x, dtype=np.float64)
-    x = x - x.mean()
-    n = len(x)
-    nfft = 1 << (2 * n - 1).bit_length()  # next power of two >= 2n - 1
-    f = np.fft.rfft(x, n=nfft)
-    acov = np.fft.irfft(f * f.conj(), n=nfft)[: max_lag + 1]
-    denom = float((x * x).sum())
-    return acov / denom if denom > 0 else np.zeros(max_lag + 1)
 
 
 def segment_runs(mask: np.ndarray):

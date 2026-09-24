@@ -284,7 +284,7 @@ workflow.
 
 ## Coding principles
 
-- Use Python/pandas/numpy/scikit-learn unless another library is justified.
+- If possible, use Python/pandas/numpy/scikit-learn/scipy/statsmodels.
 - Keep exploratory notebooks separate from reusable source code.
 - Avoid data leakage at every stage.
 - Never randomly shuffle the time series for the main evaluation.
