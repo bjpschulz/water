@@ -21,6 +21,9 @@ def split_series(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
     Boundaries: Monday 00:00 America/Vancouver, counted back from the last
     Monday midnight in the series, so valid/test cover full weekly cycles.
+    This keeps weekly seasonality and weekly baselines comparable across
+    splits; DST may make a local week contain slightly more or fewer UTC
+    minute rows, which is expected. Splits remain chronological, not random.
     Train excludes the leading lag warm-up rows (NaN features); the three
     slices are contiguous and concatenate to the complete-case region.
     """
@@ -40,4 +43,25 @@ def split_series(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 
 if __name__ == "__main__":
-    print({k: len(v) for k, v in split_series(load_features()).items()})
+    features = load_features()
+    splits = split_series(features)
+    lag_cols = [c for c in features.columns if c.startswith("lag_")]
+    warmup = int(features[lag_cols].isna().any(axis=1).sum())
+    complete_case_rows = len(features) - warmup
+
+    print("split lengths:", {k: len(v) for k, v in splits.items()})
+    print("feature rows:", len(features))
+    print("lag warm-up rows:", warmup)
+    print("complete-case rows:", complete_case_rows)
+    print("split rows:", sum(len(v) for v in splits.values()))
+    print("coverage check:", sum(len(v) for v in splits.values()) == complete_case_rows)
+
+    for name, frame in splits.items():
+        start = pd.to_datetime(frame.index[0], unit="s", utc=True)
+        end = pd.to_datetime(frame.index[-1], unit="s", utc=True)
+        local_start = start.tz_convert("America/Vancouver")
+        local_end = end.tz_convert("America/Vancouver")
+        print(
+            f"{name} boundaries: {local_start} -> {local_end}; "
+            f"UTC span minutes={(end - start).total_seconds() / 60:.0f}"
+        )

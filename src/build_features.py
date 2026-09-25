@@ -8,14 +8,10 @@ building the table on the full series *before* splitting is leakage-safe.
 Feature groups (justifications measured in results/eda_whw/summary.json):
 
   lags       lag_1, lag_5, lag_15, lag_30, lag_60, lag_1440, lag_10080
-             (avg_rate shifted by k minutes; k <= ACF decay region and the
-             24h / 168h ACF bumps). The occurrence lag (occ_lag_1) is
-             deliberately NOT built yet.
+             The occurrence lag (occ_lag_1) is NOT built yet.
   calendar   hour, hour_sin, hour_cos, dow_local, dow_sin, dow_cos, weekend
-             -- computed from datetime_local (America/Vancouver), never from
-             the UTC-derived time (settled fact, AGENTS.md). Raw integers and
-             cyclic encodings are both stored; since different encoding suits 
-             different model classes.
+             Raw integers and cyclic encodings are both stored; since different
+             encoding suits different model classes.
 
 Warm-up NaN policy: the first rows where lags are undefined (10,080 rows for lag_10080)
 are KEPT. Drop them at train time if using a linear model;
@@ -26,8 +22,6 @@ Run: uv run python src/build_features.py
 Outputs:
   data/processed/whw_features_v1.parquet   feature table (index unix_ts)
   data/processed/whw_features_v1.csv       identical content, for skimming
-  results/build_features/summary.json      row/column inventory, NaN counts,
-                                           and the results of all self-checks
 """
 
 #%%
@@ -103,7 +97,7 @@ def add_calendar(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def validate_features(src: pd.DataFrame, df: pd.DataFrame) -> dict:
+def validate_features(src: pd.DataFrame, df: pd.DataFrame) -> dict:             # Make this into a unit-testable function??? combine with restructure of dir.
     """ Self-checks on the built table. """
     checks = {}
 

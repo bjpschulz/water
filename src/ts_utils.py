@@ -1,12 +1,4 @@
-"""
-Small, reusable time-series utilities shared across scripts in this project.
-
-Kept separate from any single analysis script (e.g. initial_eda.py) so that
-functions used in more than one place -- the boolean run-length segmentation
-used for event/gap detection, the per-run summary statistics, and JSON
-serialization -- have a single implementation, instead of being copy-pasted
-between scripts and risking drift.
-"""
+""" Small, reusable time-series utilities shared across scripts in this project. """
 
 import numpy as np
 import pandas as pd
