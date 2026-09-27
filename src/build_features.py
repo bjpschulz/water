@@ -97,42 +97,20 @@ def add_calendar(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def validate_features(src: pd.DataFrame, df: pd.DataFrame) -> dict:             # Make this into a unit-testable function??? combine with restructure of dir.
-    """ Self-checks on the built table. """
+def validate_features(src: pd.DataFrame, df: pd.DataFrame) -> dict:
+    """ Runtime data-integrity checks on the actual built table.
+    Catches pipeline-level corruption on real data that a synthetic fixed unit-test can't. """
     checks = {}
 
-    target = df["avg_rate"]
-    checks["target_identical_to_input"] = bool(target.equals(src["avg_rate"]))
+    checks["target_identical_to_input"] = bool(df["avg_rate"].equals(src["avg_rate"]))
     checks["row_count_identical_to_input"] = len(df) == len(src)
 
+    expected = src["avg_rate"].to_numpy()
     for k in LAGS:
-        col = df[f"lag_{k}"]
-        values = col.to_numpy()
-        expected = src["avg_rate"].to_numpy()
-        checks[f"lag_{k}_values_match_shift"] = bool(
-            np.array_equal(values[k:], expected[:-k], equal_nan=True)
-        )
-        checks[f"lag_{k}_nan_count_equals_{k}"] = int(col.isna().sum()) == k
-
-    checks["hour_in_range"] = bool(df["hour"].between(0, 23).all())
-    checks["dow_in_range"] = bool(df["dow_local"].between(0, 6).all())
-    for col in ("hour_sin", "hour_cos", "dow_sin", "dow_cos"):
-        checks[f"{col}_in_unit_range"] = bool(df[col].between(-1.0, 1.0).all())
-    checks["weekend_matches_dow"] = bool(
-        (df["weekend"] == df["datetime_local"].dt.day_name().isin(["Saturday", "Sunday"])).all()
-    )
-
-    # Cyclic continuity spot-check: the hour embedding must wrap around,
-    # i.e. hour 23 and hour 0 map to nearby points on the unit circle.
-    h23 = df.loc[df["hour"] == 23, ["hour_sin", "hour_cos"]].iloc[0]
-    h0 = df.loc[df["hour"] == 0, ["hour_sin", "hour_cos"]].iloc[0]
-    checks["hour_embedding_wraps_at_midnight"] = bool(
-        np.hypot(h23["hour_sin"] - h0["hour_sin"], h23["hour_cos"] - h0["hour_cos"])
-        < np.hypot(
-            df.loc[df["hour"] == 12, "hour_sin"].iloc[0] - h0["hour_sin"],
-            df.loc[df["hour"] == 12, "hour_cos"].iloc[0] - h0["hour_cos"],
-        )
-    )
+        values = df[f"lag_{k}"].to_numpy()
+        values_match = np.array_equal(values[k:], expected[:-k], equal_nan=True)
+        nan_count_ok = int(df[f"lag_{k}"].isna().sum()) == k
+        checks[f"lag_{k}_correct"] = bool(values_match and nan_count_ok)
 
     return checks
 

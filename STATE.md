@@ -4,8 +4,8 @@ Snapshot of *where the project currently stands*. Changes often — every
 time a stage finishes or an open decision resolves. Two things this file
 deliberately does **not** contain:
 
-- **Exact measured numbers** — those live in `results/*/summary.json`,
-  produced by reproducible scripts. Cite the path, don't retype the value.
+- **Exact measured numbers** — those live in `results/`,
+  produced by reproducible scripts (like eda, baseline or training scripts).
 - **Settled judgment calls** (e.g. "this comparison is confounded, don't
   use it") — once something here resolves, its one-line conclusion moves
   to AGENTS.md's "Settled facts & scope decisions" and gets deleted from
