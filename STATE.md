@@ -15,9 +15,8 @@ deliberately does **not** contain:
 Rules, protocol, and anything that shouldn't change session-to-session
 live in AGENTS.md, not here.
 
-Last updated: after building the Stage 1 chronological splits
-(`src/splits.py`, consumed in-memory via `split_series()`), before Stage 2
-(naive baselines).
+Last updated: after computing the Stage 2 naive baselines
+(`src/baselines.py`; `results/baselines/summary.json`).
 
 ## Where we are
 
@@ -37,34 +36,28 @@ Monday-00:00-local-aligned boundaries (~70/15/15), valid/test at full weekly
 cycles, lag warm-up rows excluded from train. Downstream stages must obtain
 splits via `split_series()` — never re-derive boundaries.
 
-No model has been fit. No baseline has been run.
+Stage 2 (naive/rule baselines) is complete: all five baselines were
+evaluated on the chronological validation split using MAE and RMSE. Exact
+scores and split metadata are in `results/baselines/summary.json`.
 
 ## Immediate next steps
 
 Next:
-1. Compute naive/rule baselines at 1-minute resolution on the validation
-   set (Stage 2), in a new `src/baselines.py` importing `load_features` /
-   `split_series` from `src/splits.py`: always-zero, always-mean (train
-   mean), persistence, seasonal-naive-daily, seasonal-naive-weekly (fixed
-   UTC-minute lag convention, per AGENTS.md Stage 2). Baselines needing
-   history before valid's first row (persistence, seasonal-naive) get it by
-   concatenating train+valid — contiguous by construction. Save MAE/RMSE
-   reproducibly under `results/`.
-2. Fit the diagnostic linear regression and quick LightGBM (Stage 3) using
+1. Fit the diagnostic linear regression and quick LightGBM (Stage 3) using
    calendar + full lag set. Same validation set, same treatment. Train on
    the train split as-is (warm-up NaN rows already excluded by Stage 1).
    Note: `lightgbm` is not yet a dependency — add it to `pyproject.toml`
    when this step starts.
-3. Decision point (Stage 4): compare Stage 3 vs Stage 2. Update "Open
+2. Decision point (Stage 4): compare Stage 3 vs Stage 2. Update "Open
    decision" below to "decided" with the actual numbers, then migrate it
    to AGENTS.md's settled-facts list.
-4. Depending on step 3: proceed with full modeling at 1-minute resolution,
+3. Depending on step 2: proceed with full modeling at 1-minute resolution,
    or revisit Option A/B below with measured justification.
-5. Run the feature-group ablation (calendar / +recent lags /
+4. Run the feature-group ablation (calendar / +recent lags /
    +daily-weekly lags / full) at the settled resolution.
-6. Analyze feature importance and residual ACF.
-7. Tune a small number of meaningful hyperparameters.
-8. Document results reproducibly under `results/`.
+5. Analyze feature importance and residual ACF.
+6. Tune a small number of meaningful hyperparameters.
+7. Document results reproducibly under `results/`.
 
 ## Open decision: forecasting horizon / resolution
 

@@ -1,0 +1,44 @@
+{
+  "target": "avg_rate",
+  "resolution": "1-minute",
+  "evaluation_split": "validation",
+  "input_feature_table": "data/processed/whw_features_v1.parquet",
+  "split_rows": {
+    "train": 626817,
+    "valid": 131100,
+    "test": 132420
+  },
+  "validation": {
+    "n_observations": 131100,
+    "start_unix_ts": 1380524400,
+    "end_unix_ts": 1388390340
+  },
+  "train_target_mean": 0.5738006467597401,
+  "baselines": {
+    "always_zero": {
+      "definition": "Predict 0 L/min for every row",
+      "mae": 0.500118230358505,
+      "rmse": 1.843723246066348
+    },
+    "always_mean": {
+      "definition": "Predict the mean avg_rate from the training split",
+      "mae": 0.9235008610823212,
+      "rmse": 1.7761267584931075
+    },
+    "persistence": {
+      "definition": "Predict avg_rate from 1 UTC-minute earlier",
+      "mae": 0.43018306636155607,
+      "rmse": 1.478021024200482
+    },
+    "seasonal_naive_daily": {
+      "definition": "Predict avg_rate from 1,440 UTC-minute rows earlier",
+      "mae": 0.868421052631579,
+      "rmse": 2.4122367931653255
+    },
+    "seasonal_naive_weekly": {
+      "definition": "Predict avg_rate from 10,080 UTC-minute rows earlier",
+      "mae": 0.8467009916094584,
+      "rmse": 2.3715534629462836
+    }
+  }
+}

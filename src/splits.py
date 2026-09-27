@@ -1,3 +1,4 @@
+# %%
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +42,7 @@ def split_series(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "test": df.iloc[test_pos:],
     }
 
-
+#%%
 if __name__ == "__main__":
     features = load_features()
     splits = split_series(features)
