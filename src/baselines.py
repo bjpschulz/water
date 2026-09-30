@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from splits import load_features, split_series
-from ts_utils import to_serializable
+from ts_utils import mase, mase_scale, to_serializable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO_ROOT / "results" / "baselines"
@@ -29,12 +29,13 @@ LAG_COLUMNS = {
 
 
 def calculate_baselines(splits: dict[str, pd.DataFrame]) -> dict:
-    """Calculate MAE/RMSE for fixed baselines over every validation row."""
+    """Calculate MAE, RMSE, and MASE for fixed baselines."""
     train = splits["train"]
     valid = splits["valid"]
     y_train = train[TARGET].to_numpy(dtype=np.float64)
     y_valid = valid[TARGET].to_numpy(dtype=np.float64)
     train_mean = float(y_train.mean())
+    scale = mase_scale(y_train)
 
     predictions = {
         "always_zero": (np.zeros(len(valid)), "Predict 0 L/min for every row"),
@@ -52,6 +53,7 @@ def calculate_baselines(splits: dict[str, pd.DataFrame]) -> dict:
             "definition": definition,
             "mae": float(mean_absolute_error(y_valid, y_pred)),
             "rmse": float(np.sqrt(mean_squared_error(y_valid, y_pred))),
+            "mase": mase(y_valid, y_pred, scale),
         }
 
     return {
@@ -66,6 +68,11 @@ def calculate_baselines(splits: dict[str, pd.DataFrame]) -> dict:
             "end_unix_ts": int(valid.index[-1]),
         },
         "train_target_mean": train_mean,
+        "mase": {
+            "definition": "validation MAE divided by training mean absolute one-step target difference",
+            "denominator": scale,
+            "denominator_split": "train",
+        },
         "baselines": results,
     }
 
@@ -80,7 +87,10 @@ def main() -> None:
         f.write("\n")
     print(f"Baseline metrics saved to {OUT_JSON.relative_to(REPO_ROOT)}")
     for name, metrics in summary["baselines"].items():
-        print(f"{name}: MAE={metrics['mae']:.6f}, RMSE={metrics['rmse']:.6f}")
+        print(
+            f"{name}: MAE={metrics['mae']:.6f}, RMSE={metrics['rmse']:.6f}, "
+            f"MASE={metrics['mase']:.6f}"
+        )
 
 
 if __name__ == "__main__":

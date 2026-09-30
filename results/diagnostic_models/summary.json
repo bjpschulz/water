@@ -1,0 +1,69 @@
+{
+  "purpose": "Diagnostic check: do calendar + lag features let a simple model clear the naive/seasonal-naive floor by a real margin. Not a final, tuned model -- see AGENTS.md Stage 3/4.",
+  "target": "avg_rate",
+  "resolution": "1-minute",
+  "evaluation_split": "validation",
+  "input_feature_table": "data/processed/whw_features_v1.parquet",
+  "baseline_summary_for_comparison": "results/baselines/summary.json",
+  "split_rows": {
+    "train": 626817,
+    "valid": 131100,
+    "test": 132420
+  },
+  "validation": {
+    "n_observations": 131100,
+    "start_unix_ts": 1380524400,
+    "end_unix_ts": 1388390340
+  },
+  "mase": {
+    "definition": "validation MAE divided by training mean absolute one-step target difference",
+    "denominator": 0.4653781971104758,
+    "denominator_split": "train"
+  },
+  "models": {
+    "linear_regression": {
+      "features": [
+        "hour_sin",
+        "hour_cos",
+        "dow_sin",
+        "dow_cos",
+        "weekend",
+        "lag_1",
+        "lag_5",
+        "lag_15",
+        "lag_30",
+        "lag_60",
+        "lag_1440",
+        "lag_10080"
+      ],
+      "params": "sklearn LinearRegression, default parameters",
+      "mae": 0.5176146392262677,
+      "rmse": 1.3299522420089898,
+      "mase": 1.1122451426390987
+    },
+    "lightgbm": {
+      "features": [
+        "hour",
+        "dow_local",
+        "weekend",
+        "lag_1",
+        "lag_5",
+        "lag_15",
+        "lag_30",
+        "lag_60",
+        "lag_1440",
+        "lag_10080"
+      ],
+      "params": {
+        "n_estimators": 100,
+        "num_leaves": 31,
+        "learning_rate": 0.1,
+        "random_state": 42,
+        "verbosity": -1
+      },
+      "mae": 0.4958843140688155,
+      "rmse": 1.2923542039776799,
+      "mase": 1.0655512379990115
+    }
+  }
+}

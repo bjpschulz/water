@@ -103,12 +103,12 @@ Append-only. Each line is a judgment call that has already been made and
 verified. Add a new line only when something genuinely resolves;
 never delete or rewrite one except to correct an error.
 
-- **V100 period only** for all analysis (`unix_ts >= 1342287780`); earlier
-  rows use a different pulse resolution and would mix measurement
-  granularities if included. Verified: transition timestamp is clean,
-  pulse sizes confirmed on both sides, counter is continuous across the
-  swap (no reset). (`src/initial_eda.py` → `meter_transition` in
-  `summary.json`.)
+- **Clean V100 period only** for primary analysis
+  (`unix_ts >= 1342310580`); the meter transition at `1342287780` and the
+  settling increment at `1342310520` are excluded. Earlier rows use a
+  different pulse resolution or contain the one-off settling increment.
+  Verified in `src/initial_eda.py` → `meter_transition` in
+  `results/eda_whw/summary.json`.
 - **`unix_ts` is true Unix/UTC time**, not local time encoded as UTC.
   Derived local timezone is America/Vancouver. Do not treat the naive UTC-derived hour-of-day as
   local time when building calendar features.
@@ -120,20 +120,28 @@ never delete or rewrite one except to correct an error.
 - **Rolling-window statistics excluded** from the candidate feature set —
   largely redundant with the lags they'd average over. Revisit only with
   a specific methodological justification, per Research Constraints above.
+- **Stage 3 diagnostic finding:** LightGBM's validation MAE is slightly
+  below always-zero but above persistence. Zero is the MAE-optimal constant
+  prediction when the median is zero; this does not make it optimal among
+  feature-conditioned rules. Results: `results/diagnostic_models/summary.json`.
+- **60-minute block volume selected for Stage 5 modeling** based on the
+  Stage 4 validation comparison. LightGBM beats the naive baselines at this
+  resolution and has the lowest MAE/RMSE per minute among the tested
+  models and baselines. The final test split remains untouched. Results:
+  `results/horizon_ablation/summary.json`.
+- **MASE denominator:** training-only mean absolute one-step target
+  difference at the same resolution (in-sample persistence error). Report
+  MAE and RMSE too; seasonal-naive forecasts remain explicit baselines.
 
 ## Temporal autocorrelation
 
 Temporal autocorrelation means observations close together in time are statistically dependent.
 
-**Resolution note:** the lag set below is in 1-minute units, matching the
-current primary target resolution.
-<!-- If the horizon decision (STATE.md)
-later moves to 15-minute blocks for the *modeling* target, this lag set
-stays the operative one for the *autocorrelation research question (RQ3)*
-regardless — RQ3 asks how strong the autocorrelation structure is at
-native resolution, which is a separate question from what resolution is
-used for modeling (RQ1). Aggregation, if adopted, is a modeling-target
-decision, not a reason to stop measuring RQ3 at native resolution. -->
+**Resolution note:** the lag set below is in 1-minute units and remains
+operative for the *autocorrelation research question (RQ3)* regardless of
+the 60-minute modeling target. RQ3 asks how strong the autocorrelation
+structure is at native resolution, which is separate from the modeling
+resolution for RQ1.
 
 Candidate lags (1-minute resolution):
 
@@ -178,7 +186,7 @@ in-memory; no split data artifacts are written.
 
 ### Stage 2 — Naive/rule baseline sweep (1-minute resolution, no fitting)
 
-Compute MAE and RMSE on the validation set for each of:
+Compute MAE, RMSE, and MASE on the validation set for each of:
 
 1. Always-zero: `y_hat_t = 0`
 2. Always-mean: `y_hat_t = mean(y_train)` (mean computed from train only)
@@ -190,48 +198,68 @@ No model fitting involved — these are fixed rules evaluated on held-out
 data. Save results reproducibly under `results/` (per Coding principles).
 
 Seasonal-naive convention (settled): fixed UTC-minute lags (`t-1440`,
-`t-10080`) — matching the textbook MASE definition.
+`t-10080`). They are explicit forecast baselines; the MASE denominator is
+the separate one-step persistence scale described under Evaluation principles.
 
 ### Stage 3 — Diagnostic model (1-minute resolution, small/fast, not the final model)
 
 Fit one simple linear regression and one quick, untuned LightGBM using
 calendar features (hour, day-of-week, weekend, cyclical encodings) plus the
-full 1-minute lag set (1, 5, 15, 30, 60, 1440, 10080). Evaluate MAE/RMSE on
+full 1-minute lag set (1, 5, 15, 30, 60, 1440, 10080). Evaluate MAE, RMSE,
+and MASE on
 the same validation set as Stage 2. Purpose: test whether these features
 let a model clear the naive/seasonal-naive floor by a real margin — not to
 produce a final tuned model.
 
-### Stage 4 — Decision point (evidence-based)
+### Stage 4 — Horizon aggregation ablation
 
-Compare Stage 3 against Stage 2, in particular against seasonal-naive
-(daily and weekly). Two outcomes:
+Stage 3 found only a small LightGBM improvement over always-zero MAE, and
+neither diagnostic model beat persistence on MAE. The completed ablation
+compared fixed 15-, 30-, and 60-minute targets; validation evidence selects
+60-minute blocks for the next modeling stage.
 
-- **Real, meaningful improvement over seasonal-naive** → 1-minute
-  resolution is viable for RQ1. Proceed with full modeling at 1-minute
-  (Stage 5+). Update STATE.md's "Open decision: forecasting horizon"
-  section to "decided," then move it into this file's "Settled facts &
-  scope decisions" as a one-line entry with the headline numbers, and
-  delete it from STATE.md.
-- **No real improvement** (diagnostic model ≈ naive floor despite
-  features) → this is now measured evidence, not assumption, that native
-  resolution needs reframing. Revisit Option A (hurdle model) or Option B
-  (15-minute aggregation, with actual measured zero-proportion at that
-  resolution logged) in STATE.md, and update this document's protocol
-  above only if the stages themselves need to change.
+For each horizon, sum the 1-minute `avg_rate` values in a complete,
+non-overlapping block. Since each increment is timestamped at its interval
+end, a block starting at `t` contains increments ending in `(t, t+h]`.
+The resulting target is consumed volume in liters per block. Blocks are
+aligned to fixed UTC epoch boundaries; incomplete edge blocks are excluded.
+Derive calendar features from each block's start timestamp in
+America/Vancouver. Predictions are issued at block start using only
+completed earlier blocks and known calendar features.
 
-### Stage 5+ — Full modeling (resolution depends on Stage 4 outcome)
+Use chronological train/validation/test splits aligned to Monday 00:00
+America/Vancouver, with the existing 13-week validation and test periods.
+Use the same five baselines as Stage 2: always-zero, training mean,
+one-block persistence, daily seasonal-naive, and weekly seasonal-naive.
+Seasonal lags are fixed UTC periods expressed in blocks (1440/horizon and
+10080/horizon). Diagnostic models remain linear regression and untuned
+LightGBM with calendar and feasible consumption-lag features. Convert the
+minute lag candidates (1, 5, 15, 30, 60, 1440, 10080) to whole-block lags
+when exactly representable; document the resulting feature list per
+horizon.
 
-Progressively add feature groups (ablation):
+Measure the training-split zero-target proportion at every horizon. Report
+validation MAE and RMSE for every baseline and model, plus MASE. For each
+resolution, MASE's denominator is the mean absolute one-block difference of the
+training target series (the in-sample one-step persistence error); compute
+it from training targets only. Report MAE/RMSE alongside MASE: because
+the denominator varies by horizon, MASE alone does not rank resolutions.
+Also report MAE and RMSE divided by block length, which express block
+volume error per minute for a common-unit horizon comparison.
+Save the reproducible comparison under `results/horizon_ablation/`.
+
+### Stage 5+ — Feature ablation and full modeling (60-minute resolution)
+
+Compare feature groups (lags are completed 60-minute block totals):
 
 1. Calendar/time features only
-2. Calendar + recent consumption lags (1, 5, 15, 30, 60)
-3. Calendar + recent + daily/weekly lags (1440, 10080)
-4. Optional full selected feature set
+2. Lag-only: recent, daily, and weekly consumption lags
+3. Calendar + recent lag (`lag_1_block`)
+4. Calendar + recent, daily, and weekly lags
 
 This ablation directly tests how much predictive performance comes from
-temporal dependence, and — via the calendar-only vs. lag-only comparison —
-whether daily/weekly autocorrelation is better explained by calendar
-structure or by the target's own recent history.
+temporal dependence, and whether calendar structure or the target's own
+history is more informative.
 
 Candidate models:
 
@@ -247,18 +275,21 @@ documentation of all results.
 
 ## Evaluation principles
 
-The specific metric choice is still open (see STATE.md). Regardless of
-which metric is finalized, two things are established and stable:
+Report MAE and RMSE alongside MASE. MASE is scaled by the training-only
+mean absolute one-step difference at the same resolution. It is a
+relative-skill measure against persistence; report the individual naive
+baseline scores as well, and do not use MASE alone to rank horizons.
 
-- This target is heavily zero-inflated. MAE's optimal constant baseline is
-  always-zero; RMSE's optimal constant baseline is always-mean. These are
-  different baselines, so comparing both metrics against both baseline
-  types is more informative than relying on either metric alone.
-- Any final metric choice must be benchmarked against the naive/
-  seasonal-naive baselines from Stage 2, not evaluated in isolation —
-  a MASE-style ratio (model error over seasonal-naive error) is the
-  current leading candidate for this; see STATE.md for the open question
-  on its exact definition.
+Two considerations apply to all metrics:
+
+- This target is heavily zero-inflated. Zero is the MAE-optimal constant
+  prediction when the training median is zero; this does not make it the
+  optimal feature-conditioned prediction rule. RMSE's optimal constant
+  prediction is the training mean. Compare both metrics against both
+  constant baselines and the lag-based naive baselines.
+- MASE's denominator is one-step persistence error on the training series,
+  rather than a held-out error or a seasonal-naive denominator. Seasonal
+  naive forecasts remain explicit baselines in their own right.
 
 ## Living documentation
 

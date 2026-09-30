@@ -15,8 +15,9 @@ deliberately does **not** contain:
 Rules, protocol, and anything that shouldn't change session-to-session
 live in AGENTS.md, not here.
 
-Last updated: after computing the Stage 2 naive baselines
-(`src/baselines.py`; `results/baselines/summary.json`).
+Last updated: after completing the Stage 4 horizon ablation and selecting
+the 60-minute modeling target (`src/horizon_ablation.py`;
+`results/horizon_ablation/summary.json`).
 
 ## Where we are
 
@@ -37,109 +38,72 @@ cycles, lag warm-up rows excluded from train. Downstream stages must obtain
 splits via `split_series()` — never re-derive boundaries.
 
 Stage 2 (naive/rule baselines) is complete: all five baselines were
-evaluated on the chronological validation split using MAE and RMSE. Exact
-scores and split metadata are in `results/baselines/summary.json`.
+evaluated on the chronological validation split using MAE, RMSE, and MASE.
+Exact scores and split metadata are in `results/baselines/summary.json`.
+
+Stage 3 (diagnostic models) is complete: linear regression and untuned
+LightGBM were evaluated on the same validation split. LightGBM's MAE is
+slightly below always-zero but remains above persistence; zero is the
+optimal constant prediction, not necessarily the optimal feature-conditioned
+rule. Results are in `results/diagnostic_models/summary.json`.
+
+Stage 4 (horizon aggregation ablation) is complete for 15-, 30-, and
+60-minute block-volume targets. Metrics, training target zero proportions,
+split metadata, and feature lists are in
+`results/horizon_ablation/summary.json`. Validation evidence selects
+60-minute blocks for Stage 5: LightGBM beats the naive baselines at that
+horizon and has the lowest MAE/RMSE per minute among the tested models and
+baselines. The final test split remains untouched.
 
 ## Immediate next steps
 
 Next:
-1. Fit the diagnostic linear regression and quick LightGBM (Stage 3) using
-   calendar + full lag set. Same validation set, same treatment. Train on
-   the train split as-is (warm-up NaN rows already excluded by Stage 1).
-   Note: `lightgbm` is not yet a dependency — add it to `pyproject.toml`
-   when this step starts.
-2. Decision point (Stage 4): compare Stage 3 vs Stage 2. Update "Open
-   decision" below to "decided" with the actual numbers, then migrate it
-   to AGENTS.md's settled-facts list.
-3. Depending on step 2: proceed with full modeling at 1-minute resolution,
-   or revisit Option A/B below with measured justification.
-4. Run the feature-group ablation (calendar / +recent lags /
-   +daily-weekly lags / full) at the settled resolution.
-5. Analyze feature importance and residual ACF.
-6. Tune a small number of meaningful hyperparameters.
-7. Document results reproducibly under `results/`.
+1. Run the Stage 5 feature-group ablation at the selected 60-minute
+   resolution, comparing calendar-only, lag-only, calendar + one-block lag,
+   and calendar + one-block + daily/weekly lags for linear regression and
+   LightGBM.
+2. Select features based on the validation ablation, then evaluate the
+   selected setup once on the untouched test period.
+3. Analyze feature importance and residual ACF; tune only a small number
+   of meaningful hyperparameters if justified.
+4. Save all measured results reproducibly under `results/`.
 
-## Open decision: forecasting horizon / resolution
+## Forecasting horizon / resolution
 
-Not an action item itself — it resolves as a byproduct of steps 1–4 above
-(specifically Stage 4).
+**Status: selected from Stage 4 validation evidence.** Use 60-minute
+non-overlapping block-volume targets for Stage 5. This is a validation-time
+resolution choice; do not use the final test period to revisit it.
 
-**Status: pending empirical validation (Stage 4, not yet run).**
-Working default in the meantime: native 1-minute resolution.
+## Current modelling target
 
-This is gated by AGENTS.md's evidence-gating rule — it does not become
-"decided" until Stage 2–4 numbers exist.
-
-Context relevant to judging Stage 4, once it runs:
-- Median 1-minute `avg_rate` is 0 (`target_stats.quantiles.p50` in
-  `results/eda_whw/summary.json`). Always-predicting-0 is already the
-  MAE-optimal constant rule at this resolution, so any MAE improvement
-  over it from Stage 3 is real signal, not exploited sparsity.
-- Calendar features and same-position lags are complementary, not
-  redundant (calendar = expected value at a temporal position, lag =
-  realized value) — relevant when interpreting Stage 3/5 feature
-  importances, not itself a resolution argument.
-
-Fallback if Stage 4 finds no real headroom at 1-minute resolution:
-- **Option A** — hurdle/two-part model at native resolution (probability
-  of flow, then magnitude given flow). Needs different metrics than plain
-  RMSE/MAE.
-- **Option B** — aggregate to a fixed block (e.g. 15 min), predict block
-  totals. A rough estimate from `events.mean_events_per_day` (78.3/day,
-  `summary.json`) suggests ~35–55% zero at 15 min — **unverified**, must
-  be measured directly before this option is adopted, not assumed.
-
-When this decision resolves: update the status line above, move a
-one-line settled version into AGENTS.md, and delete this section from
-STATE.md.
-
-## Current modelling target (working hypothesis, pending the decision above)
-
-`y_t = avg_rate_t`, native 1-minute, V100 period only, predicted using
-only information available at or before `t-1`.
-
-If the horizon decision moves to Option B: reformulate to
-`y_t = sum(avg_rate)` over the 15-minute block ending at `t`, predicted
-from information available at or before the end of block `t-1`. Do not
-run both formulations as if both were simultaneously current — replace
-this section's content, don't append to it.
+For each fixed UTC-aligned 60-minute block, `y_t` is the sum of its 1-minute
+`avg_rate` values (liters consumed per block). Predict at block start using
+only completed earlier blocks and known calendar features. The 1-minute
+series remains the resolution for the separate autocorrelation analysis.
 
 ## Active feature set
 
-Current, still subject to change by the Stage 5+ ablation. Every feature
-uses only information from `t-1` or earlier (leakage-safe shift semantics).
-Items 1, 2, and 4 are built into `data/processed/whw_features_v1.parquet`
-(`src/build_features.py`); item 3 is not built yet. Encoding rationale per
-model family: `FEATURES.md`.
+Stage 5 candidates at the selected 60-minute resolution, still subject to
+the feature-group ablation:
 
-In priority order, each justified by a measurement in `results/eda_whw/summary.json`:
-
-1. Recent consumption lags: `lag_1, lag_5, lag_15, lag_30, lag_60`
-   (ACF decay region + event durations) — built
-2. Daily/weekly lags: `lag_1440, lag_10080` (24h/168h ACF bumps) — built
-3. Occurrence lag: `occ_lag_1` (indicator ACF decays slower than raw ACF
-   in the 15–60 min range — motivates tracking occurrence separately) —
-   deferred, not yet in the feature table
-4. Calendar: `hour, hour_sin, hour_cos` (diurnal profile, local time),
-   `dow_local, dow_sin, dow_cos, weekend` (cheap; expected weak relative
-   to hour-of-day) — built; raw ints for tree models, sin/cos for the
-   linear benchmark (FEATURES.md)
+1. Calendar features from block start in America/Vancouver: hour and
+   day-of-week, with cyclic encodings for linear regression and raw values
+   for LightGBM (`FEATURES.md`).
+2. Completed-block consumption lags: `lag_1_block` (recent),
+   `lag_24_block` (daily), and `lag_168_block` (weekly), derived without
+   looking into the target block (`src/horizon_ablation.py`).
 
 Deliberately excluded: rolling statistics (AGENTS.md "Settled facts &
 scope decisions") and weather (scope, per AGENTS.md Research Constraints —
 never part of the candidate set).
 
-The former "known issue" about the `lag_10080` warm-up NaN tail is
-resolved: the Stage 1 split (`src/splits.py`) excludes it from train, so no
-split contains NaN lag features.
+The chronological Stage 4 split excludes the one-week lag warm-up from
+training; validation and test feature rows contain no lag NaNs.
 
-## Evaluation metric — open item
+## Evaluation metric
 
-Not finalized. Leading candidate: MAE and/or RMSE benchmarked against
-persistence/seasonal-naive baselines via a MASE-style ratio. Open
-sub-question: whether the MASE scaling denominator uses in-sample
-seasonal-naive error (Hyndman's original definition) or the same held-out
-set (simpler, less standard). Settle this once Stage 2–4 numbers exist —
-don't lock in a metric before there's data to check it against. See
-AGENTS.md → "Evaluation principles" for the stable reasoning behind why
-both MAE and RMSE are tracked regardless of which becomes primary.
+Report MAE, RMSE, and MASE against all explicit naive baselines. At each
+resolution, MASE divides validation MAE by the training-only mean absolute
+one-step target difference (persistence error). The Stage 4 comparison also
+reports MAE/RMSE per minute to compare block errors in common units. See
+`AGENTS.md` → "Evaluation principles" for the settled rationale.

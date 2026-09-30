@@ -10,11 +10,10 @@ at 1-minute lags -- including a split between the "raw" ACF and the ACF of
 the (avg_rate > 0) occurrence indicator, to help separate genuine short-run
 persistence from the trivial "zero tends to follow zero" effect.
 
-The modelling resolution is not yet settled: native 1-minute is the
-working default, with the decision gated on the Stage 2-4 baseline /
-diagnostic comparison (see STATE.md, "Open decision: forecasting
-horizon"). This script therefore measures the 1-minute structure -- an
-input to that decision, not a final modelling choice.
+The Stage 4 validation comparison selected 60-minute blocks for modeling.
+This script remains at native 1-minute resolution for data-quality,
+consumption-structure, and autocorrelation analyses; those questions are
+distinct from the modeling target resolution.
 
 Timezone convention (settled fact, AGENTS.md): unix_ts is true Unix/UTC
 time and the household is in America/Vancouver. The master grid, lags,
@@ -74,9 +73,8 @@ LOCAL_TZ = "America/Vancouver"
 
 # Candidate lags for THIS (1-minute-resolution) analysis only. Chosen to
 # span short-run persistence (1-30 min) up to daily/weekly cycles.
-# NOTE: if the project moves to 15-minute aggregated blocks, this set is to be
-# superseded by a block-resolution lag set (see AGENTS.md) -- it is not
-# reused as-is at the coarser resolution.
+# These native-resolution lags remain for the autocorrelation analysis;
+# block-level modeling lags are derived separately in horizon_ablation.py.
 CANDIDATE_LAGS = [1, 5, 15, 30, 60, 1440, 10080]
 ACF_MAX_LAG = 10080  # one week, in minutes
 SECONDS_PER_MINUTE = 60
@@ -259,12 +257,8 @@ def event_stats(target: pd.Series) -> dict:
     Characterize discrete water-use "events": contiguous runs of minutes
     with avg_rate > 0, separated by zero-flow gaps.
 
-    This quantifies the event structure referenced in the open horizon
-    decision (STATE.md): event duration is one of
-    the inputs needed to judge whether a candidate aggregation window (e.g.
-    15 minutes) is a sensible unit -- too short a window mostly just
-    relocates the same zero-inflation problem to a coarser grid, too long
-    blurs distinct events together.
+    This describes event durations and volumes at native resolution, which
+    help interpret the measured zero proportions at coarser horizons.
     """
     active = (target > 0).to_numpy()
     values = target.to_numpy(dtype=np.float64)
@@ -370,17 +364,8 @@ def acf_analysis(v100: pd.DataFrame) -> dict:
     """
     Compute two autocorrelation curves at 1-minute resolution, up to
     ACF_MAX_LAG:
-
       1. "raw": ACF of avg_rate itself.
       2. "indicator": ACF of the binary (avg_rate > 0) occurrence series.
-
-    The comparison matters for interpreting the raw ACF correctly: because
-    avg_rate is heavily zero-inflated, a large share of the raw ACF(1) can
-    come simply from "a zero minute tends to be followed by another zero
-    minute" (consequence of sparsity), rather than from
-    genuine short-run persistence in ongoing water-use events. Computing
-    the indicator ACF separately lets us see how much of the raw
-    autocorrelation is attributable to occurrence patterns alone.
     """
     target = v100["avg_rate"].to_numpy(dtype=np.float64)
     acf = sm_acf(target, nlags=ACF_MAX_LAG, fft=True)

@@ -23,8 +23,9 @@ def split_series(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     Boundaries: Monday 00:00 America/Vancouver, counted back from the last
     Monday midnight in the series, so valid/test cover full weekly cycles.
     This keeps weekly seasonality and weekly baselines comparable across
-    splits; DST may make a local week contain slightly more or fewer UTC
-    minute rows, which is expected. Splits remain chronological, not random.
+    splits; DST may make a local week contain slightly more or fewer rows
+    at the selected sampling resolution, which is expected. Splits remain
+    chronological, not random.
     Train excludes the leading lag warm-up rows (NaN features); the three
     slices are contiguous and concatenate to the complete-case region.
     """
