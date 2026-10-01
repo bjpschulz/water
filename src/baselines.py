@@ -11,8 +11,9 @@ from splits import load_features, split_series
 from ts_utils import mase, mase_scale, to_serializable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = REPO_ROOT / "results" / "baselines"
+OUT_DIR = REPO_ROOT / "output" / "baselines"
 OUT_JSON = OUT_DIR / "summary.json"
+OUT_PREDICTIONS = OUT_DIR / "validation_predictions.parquet"
 TARGET = "avg_rate"
 
 # Lag baselines are read directly from the feature table's own lag_k
@@ -28,8 +29,10 @@ LAG_COLUMNS = {
 }
 
 
-def calculate_baselines(splits: dict[str, pd.DataFrame]) -> dict:
-    """Calculate MAE, RMSE, and MASE for fixed baselines."""
+def calculate_baselines(
+    splits: dict[str, pd.DataFrame],
+) -> tuple[dict, pd.DataFrame]:
+    """Calculate baseline metrics and return their validation predictions."""
     train = splits["train"]
     valid = splits["valid"]
     y_train = train[TARGET].to_numpy(dtype=np.float64)
@@ -47,13 +50,22 @@ def calculate_baselines(splits: dict[str, pd.DataFrame]) -> dict:
     for name, (col, definition) in LAG_COLUMNS.items():
         predictions[name] = (valid[col].to_numpy(dtype=np.float64), definition)
 
+    pred_frame = pd.DataFrame(
+        {
+            "unix_ts": valid.index.to_numpy(dtype=np.int64),
+            "actual": y_valid,
+            **{name: y_pred for name, (y_pred, _) in predictions.items()},
+        }
+    )
+
     results = {}
     for name, (y_pred, definition) in predictions.items():
         results[name] = {
             "definition": definition,
             "mae": float(mean_absolute_error(y_valid, y_pred)),
             "rmse": float(np.sqrt(mean_squared_error(y_valid, y_pred))),
-            "mase": mase(y_valid, y_pred, scale),
+            "mase": mase(y_valid, y_pred, scale),   # added here in hindsight, since this will be the only
+                                                    # comparable (scale-independent) loss in horizon ablation
         }
 
     return {
@@ -61,6 +73,7 @@ def calculate_baselines(splits: dict[str, pd.DataFrame]) -> dict:
         "resolution": "1-minute",
         "evaluation_split": "validation",
         "input_feature_table": "data/processed/whw_features_v1.parquet",
+        "validation_predictions_file": "output/baselines/validation_predictions.parquet",
         "split_rows": {name: len(frame) for name, frame in splits.items()},
         "validation": {
             "n_observations": len(valid),
@@ -74,18 +87,20 @@ def calculate_baselines(splits: dict[str, pd.DataFrame]) -> dict:
             "denominator_split": "train",
         },
         "baselines": results,
-    }
+    }, pred_frame
 
 
 def main() -> None:
     """Run Stage 2 and save its reproducible summary."""
     splits = split_series(load_features())
-    summary = calculate_baselines(splits)
+    summary, predictions = calculate_baselines(splits)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     with OUT_JSON.open("w", encoding="utf-8") as f:
         json.dump(to_serializable(summary), f, indent=2, allow_nan=False)
         f.write("\n")
+    predictions.to_parquet(OUT_PREDICTIONS, index=False)
     print(f"Baseline metrics saved to {OUT_JSON.relative_to(REPO_ROOT)}")
+    print(f"Baseline predictions saved to {OUT_PREDICTIONS.relative_to(REPO_ROOT)}")
     for name, metrics in summary["baselines"].items():
         print(
             f"{name}: MAE={metrics['mae']:.6f}, RMSE={metrics['rmse']:.6f}, "

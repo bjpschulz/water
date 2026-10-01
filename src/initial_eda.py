@@ -27,8 +27,8 @@ Outputs:
                                     index unix_ts, columns datetime_local,
                                     counter, avg_rate)
   data/processed/whw_v100.csv       identical content as CSV, for inspection
-  results/eda_whw/summary.json      all key numbers
-  results/eda_whw/figs/*.png        figures
+  output/eda_whw/summary.json      all key numbers
+  output/eda_whw/figs/*.png        figures
 
 The analysis period starts at V100_CLEAN_UNIX_TS, not at the meter-swap
 timestamp: the first V100 minutes contain one sub-pulse counter-settling
@@ -56,7 +56,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = REPO_ROOT / "data" / "Water_WHW.csv"
 PARQUET_PATH = REPO_ROOT / "data" / "processed" / "whw_v100.parquet"
 CSV_PATH = REPO_ROOT / "data" / "processed" / "whw_v100.csv"  # twin of the parquet, for eyeballing
-OUT_DIR = REPO_ROOT / "results" / "eda_whw"
+OUT_DIR = REPO_ROOT / "output" / "eda_whw"
 FIG_DIR = OUT_DIR / "figs"
 
 V100_UNIX_TS = 1_342_287_780  # 2012-07-14: documented switch to the V100 water meter

@@ -4,7 +4,7 @@ Snapshot of *where the project currently stands*. Changes often — every
 time a stage finishes or an open decision resolves. Two things this file
 deliberately does **not** contain:
 
-- **Exact measured numbers** — those live in `results/`,
+- **Exact measured numbers** — those live in `output/`,
   produced by reproducible scripts (like eda, baseline or training scripts).
 - **Settled judgment calls** (e.g. "this comparison is confounded, don't
   use it") — once something here resolves, its one-line conclusion moves
@@ -17,7 +17,7 @@ live in AGENTS.md, not here.
 
 Last updated: after completing the Stage 4 horizon ablation and selecting
 the 60-minute modeling target (`src/horizon_ablation.py`;
-`results/horizon_ablation/summary.json`).
+`output/horizon_ablation/summary.json`).
 
 ## Where we are
 
@@ -26,7 +26,7 @@ transition, target distribution, event structure, temporal profiles
 (America/Vancouver local time), ACF (raw), timezone
 verification (emitted as the `timezone` block in summary.json), and a
 leakage-safe candidate feature set — all reproducible from
-`src/initial_eda.py` → `results/eda_whw/summary.json`.
+`src/initial_eda.py` → `output/eda_whw/summary.json`.
 
 The feature table itself is now built: lags (1, 5, 15, 30, 60, 1440, 10080)
 plus calendar features in both raw and cyclic encodings (local
@@ -39,18 +39,18 @@ splits via `split_series()` — never re-derive boundaries.
 
 Stage 2 (naive/rule baselines) is complete: all five baselines were
 evaluated on the chronological validation split using MAE, RMSE, and MASE.
-Exact scores and split metadata are in `results/baselines/summary.json`.
+Exact scores and split metadata are in `output/baselines/summary.json`.
 
 Stage 3 (diagnostic models) is complete: linear regression and untuned
 LightGBM were evaluated on the same validation split. LightGBM's MAE is
 slightly below always-zero but remains above persistence; zero is the
 optimal constant prediction, not necessarily the optimal feature-conditioned
-rule. Results are in `results/diagnostic_models/summary.json`.
+rule. Results are in `output/diagnostic_models/summary.json`.
 
 Stage 4 (horizon aggregation ablation) is complete for 15-, 30-, and
 60-minute block-volume targets. Metrics, training target zero proportions,
 split metadata, and feature lists are in
-`results/horizon_ablation/summary.json`. Validation evidence selects
+`output/horizon_ablation/summary.json`. Validation evidence selects
 60-minute blocks for Stage 5: LightGBM beats the naive baselines at that
 horizon and has the lowest MAE/RMSE per minute among the tested models and
 baselines. The final test split remains untouched.
@@ -66,7 +66,7 @@ Next:
    selected setup once on the untouched test period.
 3. Analyze feature importance and residual ACF; tune only a small number
    of meaningful hyperparameters if justified.
-4. Save all measured results reproducibly under `results/`.
+4. Save all measured results reproducibly under `output/`.
 
 ## Forecasting horizon / resolution
 

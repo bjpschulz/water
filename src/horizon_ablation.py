@@ -1,7 +1,7 @@
 """Compare naive baselines and diagnostic models at 15/30/60-minute horizons.
 
 Run: uv run python src/horizon_ablation.py
-Output: results/horizon_ablation/summary.json
+Output: output/horizon_ablation/summary.json
 """
 
 import json
@@ -18,7 +18,7 @@ from ts_utils import mase, mase_scale, to_serializable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IN_PARQUET = REPO_ROOT / "data" / "processed" / "whw_v100.parquet"
-OUT_DIR = REPO_ROOT / "results" / "horizon_ablation"
+OUT_DIR = REPO_ROOT / "output" / "horizon_ablation"
 OUT_JSON = OUT_DIR / "summary.json"
 TARGET = "target_liters"
 HORIZONS_MINUTES = (15, 30, 60)

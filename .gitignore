@@ -10,7 +10,5 @@ wheels/
 .venv
 
 data/
-
-results/eda_whw/figs/
+output/
 notebooks/
-alte_tonne/

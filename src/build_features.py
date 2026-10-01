@@ -5,7 +5,7 @@ Every feature is a deterministic row-wise transform -- backward shifts of
 the target (lags) or pure functions of the timestamp (calendar) -- so
 building the table on the full series *before* splitting is leakage-safe.
 
-Feature groups (justifications measured in results/eda_whw/summary.json):
+Feature groups (justifications measured in output/eda_whw/summary.json):
 
   lags       lag_1, lag_5, lag_15, lag_30, lag_60, lag_1440, lag_10080
              The occurrence lag (occ_lag_1) is NOT built yet.
