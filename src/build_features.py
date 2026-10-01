@@ -37,7 +37,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 IN_PARQUET = REPO_ROOT / "data" / "processed" / "whw_v100.parquet"
 OUT_PARQUET = REPO_ROOT / "data" / "processed" / "whw_features_v1.parquet"
 OUT_CSV = REPO_ROOT / "data" / "processed" / "whw_features_v1.csv"  # twin, for quick skimming
-OUT_DIR = REPO_ROOT / "results" / "build_features"
 
 # Lag set from AGENTS.md ("Temporal autocorrelation" / Stage 3), in minutes.
 LAGS = [1, 5, 15, 30, 60, 1440, 10080]
@@ -98,7 +97,7 @@ def add_calendar(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def validate_features(src: pd.DataFrame, df: pd.DataFrame) -> dict:
-    """ Runtime data-integrity checks on the actual built table.
+    """ Runtime data-integrity checks.
     Catches pipeline-level corruption on real data that a synthetic fixed unit-test can't. """
     checks = {}
 
@@ -118,8 +117,7 @@ def validate_features(src: pd.DataFrame, df: pd.DataFrame) -> dict:
 #%%
 
 def main() -> None:
-    """ Build the feature table and save it, witha JSON summary and self-checks. """
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    """ Build the feature table, check and save it. """
     OUT_PARQUET.parent.mkdir(parents=True, exist_ok=True)
 
     src = load_v100()

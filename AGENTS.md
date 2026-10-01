@@ -149,9 +149,8 @@ Candidate lags (1-minute resolution):
 - 1440 minutes = 1 day
 - 10080 minutes = 1 week
 
-Measured ACF values at these lags (raw and occurrence-indicator): see
-`results/eda_whw/summary.json` → `acf.candidate_lags` /
-`acf.indicator_candidate_lags`. Not restated here.
+Measured ACF values at these lags: see
+`results/eda_whw/summary.json` → `acf.candidate_lags`. Not restated here.
 
 Distinguish:
 

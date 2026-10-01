@@ -23,7 +23,7 @@ the 60-minute modeling target (`src/horizon_ablation.py`;
 
 EDA and feature derivation are complete: grid/integrity checks, meter
 transition, target distribution, event structure, temporal profiles
-(America/Vancouver local time), ACF (raw + occurrence-indicator), timezone
+(America/Vancouver local time), ACF (raw), timezone
 verification (emitted as the `timezone` block in summary.json), and a
 leakage-safe candidate feature set — all reproducible from
 `src/initial_eda.py` → `results/eda_whw/summary.json`.

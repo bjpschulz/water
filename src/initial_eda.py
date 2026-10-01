@@ -6,9 +6,7 @@ Purpose relative to the project's research questions (see AGENTS.md): this
 script quantifies (a) data integrity at the raw 1-minute grid, (b) the
 effect of the 2012 meter replacement, (c) the extent of zero-inflation and
 event structure in whole-house water consumption, and (d) autocorrelation
-at 1-minute lags -- including a split between the "raw" ACF and the ACF of
-the (avg_rate > 0) occurrence indicator, to help separate genuine short-run
-persistence from the trivial "zero tends to follow zero" effect.
+at 1-minute lags.
 
 The Stage 4 validation comparison selected 60-minute blocks for modeling.
 This script remains at native 1-minute resolution for data-quality,
@@ -44,13 +42,13 @@ from pathlib import Path
 
 import matplotlib
 
-matplotlib.use("Agg")  # headless: never try to open a GUI window when run as a script
+matplotlib.use("Agg")  # headless
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 import numpy as np
 import pandas as pd
-from statsmodels.tsa.stattools import acf as sm_acf  # aliased: acf_analysis uses a local variable named acf
+from statsmodels.tsa.stattools import acf
 
 from ts_utils import distribution_summary, segment_runs, to_serializable
 
@@ -63,10 +61,8 @@ FIG_DIR = OUT_DIR / "figs"
 
 V100_UNIX_TS = 1_342_287_780  # 2012-07-14: documented switch to the V100 water meter
 
-# First timestamp at which the V100 series is fully settled on the 0.5 L
-# pulse grid: immediately after the swap the counter shows one single
-# sub-pulse increment (< 0.5 L, at unix_ts 1342310520, avg_rate 0.053) as
-# it settles onto the new pulse grid.
+# First timestamp at which the V100 series is fully settled on the 0.5 L pulse grid
+# (after the swap the counter shows one single sub-pulse increment < 0.5 L, at unix_ts 1342310520, avg_rate 0.053)
 V100_CLEAN_UNIX_TS = 1_342_310_580
 
 LOCAL_TZ = "America/Vancouver"
@@ -131,12 +127,7 @@ def check_raw(df: pd.DataFrame) -> dict:
 
 
 def analyze_transition(df: pd.DataFrame) -> dict:
-    """
-    Characterize the 2012-07-14 meter replacement: compare pulse sizes
-    (smallest and most common positive counter increments) before and
-    after, and check that the cumulative counter itself stayed continuous
-    across the swap (no reset to zero, no jump).
-    """
+    """ Characterize the 2012-07-14 meter replacement. """
     old = df[df["unix_ts"] < V100_UNIX_TS]
     v100 = df[df["unix_ts"] >= V100_UNIX_TS]
 
@@ -158,9 +149,7 @@ def analyze_transition(df: pd.DataFrame) -> dict:
     counter_before = df["counter"].iloc[transition_row - 1]
     counter_after = df["counter"].iloc[transition_row]
 
-    # Immediately after the swap, the counter shows one single increment
-    # smaller than the expected 0.5 L V100 pulse size, as it settles onto
-    # the new pulse grid.
+    # after swap, the counter shows one single increment smaller than the expected 0.5 L
     v100_increments = v100["counter"].diff()
     sub_pulse = v100_increments[(v100_increments > 0) & (v100_increments < 0.5)]
     sub_pulse_note = {
@@ -173,8 +162,7 @@ def analyze_transition(df: pd.DataFrame) -> dict:
         ),
     }
 
-    # Everything from V100_CLEAN_UNIX_TS onward must sit exactly on the
-    # 0.5 L pulse grid: verify that claim rather than assume it.
+    # Verify that everything from V100_CLEAN_UNIX_TS onward sits exactly on 0.5 L pulse grid
     settled = df[df["unix_ts"] >= V100_CLEAN_UNIX_TS]
     settled_increments = settled["counter"].diff()
     off_grid_counter = int(
@@ -199,8 +187,6 @@ def analyze_transition(df: pd.DataFrame) -> dict:
             "off_grid_counter_increments": off_grid_counter,
             "off_grid_avg_rate_values": off_grid_avg_rate,
         },
-        "rows_excluded_before_transition": int(len(old)),
-        "rows_kept_from_transition_onward": int(len(v100)),
         "old_meter": pulse_summary(old),
         "v100_meter": pulse_summary(v100),
         "v100_sub_pulse_artifacts": sub_pulse_note,
@@ -230,7 +216,7 @@ def check_v100_grid(v100: pd.DataFrame) -> dict:
 
 #%%
 
-def target_stats(target: pd.DataFrame) -> dict:
+def target_stats(target: pd.Series) -> dict:
     """
     Distributional summary of the modelling target (avg_rate) over the
     V100 period: standard descriptive stats, upper-tail quantiles (the
@@ -246,9 +232,6 @@ def target_stats(target: pd.DataFrame) -> dict:
         "zero_count": int((target == 0).sum()),
         "zero_proportion": float((target == 0).mean()),
         "mean_daily_volume_L": float(target.sum() / (len(target) / 1440)),
-        # "inst_rate_describe": {
-        #     k: float(v) for k, v in v100["inst_rate"].describe().items()
-        # },
     }
 
 #%%
@@ -279,15 +262,8 @@ def event_stats(target: pd.Series) -> dict:
 
 def temporal_profiles(v100: pd.DataFrame) -> dict:
     """
-    Mean avg_rate and nonzero-fraction, grouped by LOCAL hour-of-day,
-    day-of-week, and weekend/weekday. This is the descriptive counterpart
-    to the calendar features listed as candidates in AGENTS.md.
-
     unix_ts is true Unix/UTC time and the
-    household is in America/Vancouver, so calendar grouping must use
-    datetime_local. Grouping on the UTC-derived hour instead would rotate
-    the diurnal profile by 7-8 hours (the local evening peak lands at
-    "3 am" UTC) and mislabel day-of-week for evening hours.
+    household is in America/Vancouver, so calendar grouping must use datetime_local.
     """
     target = v100["avg_rate"]
     out = {"timezone": LOCAL_TZ}
@@ -318,22 +294,13 @@ def temporal_profiles(v100: pd.DataFrame) -> dict:
 
 
 def daily_volumes(v100: pd.DataFrame) -> pd.Series:
-    """
-    Total volume (L) per LOCAL calendar day.
-    The first day is dropped.
-
-    tz_localize(None) drops the tz label but keeps the local wall time, so
-    flooring to "D" gives one unique key per local calendar day.
-    """
-    local_day = v100["datetime_local"].dt.tz_localize(None).dt.floor("D")
+    """ Total volume (L) per LOCAL calendar day. The first day is dropped. """
+    local_day = v100["datetime_local"].dt.tz_localize(None).dt.floor("D") # tz_localize(None) drops tz label, keeps local wall time
     return v100["avg_rate"].groupby(local_day).sum().iloc[1:]
 
 
 def daily_volume_stats(daily: pd.Series) -> dict:
-    """
-    Distribution of daily volume plus the 5 lowest and 5 highest days.
-    Purely descriptive: it shows where atypical days are, not why.
-    """
+    """ Distribution of daily volume plus the 5 lowest and 5 highest days. """
     return {
         "volume_L": distribution_summary(daily.to_numpy()),
         "lowest_days_L": {str(d.date()): float(v) for d, v in daily.nsmallest(5).items()},
@@ -342,11 +309,8 @@ def daily_volume_stats(daily: pd.Series) -> dict:
 
 
 def longest_zero_runs(v100: pd.DataFrame) -> list:
-    """
-    The 5 longest runs of consecutive zero-flow minutes, with local start/end.
-    Ordinary overnight lulls are ~9-10 h; a run far beyond that means nobody
-    used water for a long stretch.
-    """
+    """ The 5 longest runs of consecutive zero-flow minutes, with local start/end. """
+
     starts, ends = segment_runs((v100["avg_rate"] == 0).to_numpy())
     lengths = ends - starts
     local = v100["datetime_local"]
@@ -362,15 +326,11 @@ def longest_zero_runs(v100: pd.DataFrame) -> list:
 
 def acf_analysis(v100: pd.DataFrame) -> dict:
     """
-    Compute two autocorrelation curves at 1-minute resolution, up to
-    ACF_MAX_LAG:
-      1. "raw": ACF of avg_rate itself.
-      2. "indicator": ACF of the binary (avg_rate > 0) occurrence series.
+    Compute the autocorrelation curve of avg_rate at 1-minute resolution,
+    up to ACF_MAX_LAG.
     """
     target = v100["avg_rate"].to_numpy(dtype=np.float64)
-    acf = sm_acf(target, nlags=ACF_MAX_LAG, fft=True)
-    indicator = (target > 0).astype(np.float64)
-    acf_ind = sm_acf(indicator, nlags=ACF_MAX_LAG, fft=True)
+    curve = acf(target, nlags=ACF_MAX_LAG, fft=True)
 
     def at_lags(a):
         out = {}
@@ -380,16 +340,12 @@ def acf_analysis(v100: pd.DataFrame) -> dict:
 
     return {
         "max_lag_minutes": ACF_MAX_LAG,
-        "candidate_lags": {str(k): v for k, v in at_lags(acf).items()},
-        "indicator_candidate_lags": at_lags(acf_ind),
-        "curve": acf.tolist(),
-        "indicator_curve": acf_ind.tolist(),
+        "candidate_lags": at_lags(curve),
+        "curve": curve.tolist(),
     }
 
 
-def make_figures(
-    df: pd.DataFrame, v100: pd.DataFrame, acf_result: dict, daily: pd.Series
-) -> None:
+def make_figures(v100: pd.DataFrame, acf_result: dict, daily: pd.Series) -> None:
     """ Save all diagnostic figures for this EDA to FIG_DIR """
     target = v100["avg_rate"]
 
@@ -450,18 +406,7 @@ def make_figures(
     fig.savefig(FIG_DIR / "daily_volume_v100.png", dpi=150)
     plt.close(fig)
 
-    # First week plot, kinda useless
-    week = v100.iloc[: 7 * 1440]
-    fig, ax = plt.subplots(figsize=(14, 5))
-    ax.plot(week["datetime_local"], week["avg_rate"], linewidth=0.8)
-    ax.set_xlabel("Date (local time)")
-    ax.set_ylabel("avg_rate (L/min)")
-    ax.set_title("First week of the V100 period")
-    fig.tight_layout()
-    fig.savefig(FIG_DIR / "example_week.png", dpi=150)
-    plt.close(fig)
-
-    # THIS is much better
+    # Hour-of-day profile
     hour = v100["datetime_local"].dt.hour
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     axes[0].plot(range(24), target.groupby(hour).mean(), marker="o")
@@ -492,34 +437,23 @@ def make_figures(
     fig.savefig(FIG_DIR / "dow_profile.png", dpi=150)
     plt.close(fig)
 
-    # Two rows (raw ACF, indicator ACF) x two columns (full range, 6-hour
-    # zoom). Vertical dotted red lines mark the candidate lags from
-    # CANDIDATE_LAGS, so it's visually obvious whether a candidate lag sits
-    # on a genuine peak or just in the decay tail.
+    # Two panels (full range, 6-hour zoom)
     lags = np.arange(ACF_MAX_LAG + 1)
     curve = np.asarray(acf_result["curve"])
-    ind_curve = np.asarray(acf_result["indicator_curve"])
     zoom = 360
-    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
-    axes[0, 0].plot(lags, curve, linewidth=0.8)
-    axes[0, 0].set_ylabel("ACF of avg_rate")
-    axes[0, 1].plot(lags[: zoom + 1], curve[: zoom + 1], linewidth=0.8)
-    axes[0, 1].set_ylabel("ACF of avg_rate")
-    axes[0, 1].set_title("Zoom: first 6 hours")
-    axes[1, 0].plot(lags, ind_curve, linewidth=0.8, color="orange")
-    axes[1, 0].set_ylabel("ACF of (avg_rate > 0)")
-    axes[1, 1].plot(lags[: zoom + 1], ind_curve[: zoom + 1], linewidth=0.8, color="orange")
-    axes[1, 1].set_ylabel("ACF of (avg_rate > 0)")
-    axes[1, 1].set_title("Zoom: first 6 hours")
-    for col, x_max in enumerate([ACF_MAX_LAG, zoom]):
-        for ax in axes[:, col]:
-            ax.axhline(0, color="black", linewidth=0.5)
-            ax.set_xlabel("Lag (minutes)")
-            for lag in CANDIDATE_LAGS:
-                if lag <= x_max:  # only mark lags inside this panel's range
-                    ax.axvline(lag, color="red", linestyle=":", alpha=0.4)
-    for ax in axes[:, 1]:
-        ax.set_xlim(0, zoom)  # axvline would otherwise stretch the zoom to the full lag range
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    axes[0].plot(lags, curve, linewidth=0.8)
+    axes[0].set_ylabel("ACF of avg_rate")
+    axes[1].plot(lags[: zoom + 1], curve[: zoom + 1], linewidth=0.8)
+    axes[1].set_ylabel("ACF of avg_rate")
+    axes[1].set_title("Zoom: first 6 hours")
+    for ax, x_max in zip(axes, [ACF_MAX_LAG, zoom]):
+        ax.axhline(0, color="black", linewidth=0.5)
+        ax.set_xlabel("Lag (minutes)")
+        for lag in CANDIDATE_LAGS:
+            if lag <= x_max:  # only mark lags inside this panel's range
+                ax.axvline(lag, color="red", linestyle=":", alpha=0.4)
+    axes[1].set_xlim(0, zoom)  # axvline would otherwise stretch the zoom to the full lag range
     fig.suptitle("Autocorrelation (V100 period); red lines: candidate lags")
     fig.tight_layout()
     fig.savefig(FIG_DIR / "acf.png", dpi=150)
@@ -541,9 +475,7 @@ def main() -> None:
     raw = check_raw(df)
     transition = analyze_transition(df)
 
-    # Analysis period: the pulse-grid-consistent subset (V100_CLEAN_UNIX_TS
-    # onward); the full V100 window from the meter swap is used only for
-    # the transition analysis above.
+    # Analysis period: the pulse-grid-consistent subset (V100_CLEAN_UNIX_TS onward)
     v100 = df[df["unix_ts"] >= V100_CLEAN_UNIX_TS].reset_index(drop=True).copy()
     grid = check_v100_grid(v100)
 
@@ -551,7 +483,7 @@ def main() -> None:
     stats = target_stats(target)
     events = event_stats(target)
     profiles = temporal_profiles(v100)
-    acf = acf_analysis(v100)
+    acf_result = acf_analysis(v100)
     daily = daily_volumes(v100)
     daily_stats = daily_volume_stats(daily)
     timezone = {
@@ -559,11 +491,9 @@ def main() -> None:
         "unix_ts_is_true_utc": True,
     }
 
-    # The raw ACF/indicator curves are large (10081 floats each) and belong
-    # in the figures, not in the JSON summary meant for quick inspection --
-    # only the candidate-lag values are kept in the summary dict.
+    # The raw ACF curve is large (10081 floats) and belongs in the figures
     acf_for_summary = {
-        k: v for k, v in acf.items() if k not in ("curve", "indicator_curve")
+        k: v for k, v in acf_result.items() if k != "curve"
     }
 
     summary = {
@@ -598,7 +528,7 @@ def main() -> None:
     out.to_parquet(PARQUET_PATH)
     out.to_csv(CSV_PATH)  # identical content, for direct inspection
 
-    make_figures(df, v100, acf, daily)
+    make_figures(v100, acf_result, daily)
 
     print(json.dumps(to_serializable({k: summary[k] for k in ("raw", "meter_transition", "v100_grid", "target_stats", "events", "daily_volume", "longest_zero_runs", "acf")}), indent=2))
     print(f"\nWrote {PARQUET_PATH}")
