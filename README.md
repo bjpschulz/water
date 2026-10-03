@@ -42,10 +42,13 @@ uv run python src/plot_val_predictions.py
 The baseline and diagnostic-model scripts write both `summary.json` and
 `validation_predictions.parquet` in their respective `output/` folders.
 The plotter reads those saved predictions; it does not refit models. Edit
-`VALIDATION_WEEK`, `DAY_OF_WEEK`, or `PREDICTIONS_TO_PLOT` near the top of
-`src/plot_val_predictions.py` to choose the displayed local-calendar period
-and methods. Week numbers run from 1 to 13; weekdays are numbered Monday=1
-through Sunday=7. Set `DAY_OF_WEEK = None` to show the whole week.
+`VALIDATION_WEEK`, `DAY_OF_WEEK`, `HOUR_RANGE`, or `PREDICTIONS_TO_PLOT` near
+the top of `src/plot_val_predictions.py` to choose the displayed
+local-calendar period and methods. Week numbers run from 1 to 13; weekdays
+are numbered Monday=1 through Sunday=7. Set `DAY_OF_WEEK = None` to show the
+whole week. Set `HOUR_RANGE = None` for all hours, or use a pair such as
+`(16, 22)` to show 16:00 through 21:59 local time. Actual values are always
+blue and each prediction is orange.
 Method keys are `always_zero`, `always_mean`, `persistence`,
 `seasonal_naive_daily`, `seasonal_naive_weekly`, `linear_regression`, and
 `lightgbm`.

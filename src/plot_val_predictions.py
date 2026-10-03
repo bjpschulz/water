@@ -1,5 +1,3 @@
-"""Plot actual and predicted validation values for Stage 2 and Stage 3."""
-
 from math import ceil
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -10,7 +8,6 @@ matplotlib.use("Agg")
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -19,10 +16,13 @@ MODEL_PREDICTIONS = REPO_ROOT / "output" / "diagnostic_models" / "validation_pre
 FIG_DIR = REPO_ROOT / "output" / "validation_predictions" / "figs"
 
 # Week numbers are counted from the start of the 13-week validation period.
-VALIDATION_WEEK = 1  # 1 through 13
-DAY_OF_WEEK = None  # None = whole week; 1 = Monday through 7 = Sunday
-PREDICTIONS_TO_PLOT = None  # None = all methods; otherwise use column names below
+VALIDATION_WEEK = 2  # 1 through 13
+DAY_OF_WEEK = 2  # None = whole week; 1 = Monday through 7 = Sunday
+HOUR_RANGE = (16,22)  # None = all hours; e.g. (16, 22) = 16:00 through 21:59 local time
+PREDICTIONS_TO_PLOT = ["always_zero", "persistence", "linear_regression", "lightgbm"]  # None = all methods; otherwise use column names below
 LOCAL_TIMEZONE = "America/Vancouver"
+ACTUAL_COLOR = "tab:blue"
+PREDICTION_COLOR = "tab:orange"
 
 METHOD_LABELS = {
     "always_zero": "Always zero",
@@ -43,24 +43,8 @@ def load_validation_predictions() -> pd.DataFrame:
     """Load and align the baseline and diagnostic-model prediction artifacts."""
     baselines = pd.read_parquet(BASELINE_PREDICTIONS)
     models = pd.read_parquet(MODEL_PREDICTIONS)
-    required = {"unix_ts", "actual"}
-    for label, frame in (("baseline", baselines), ("model", models)):
-        missing = required - set(frame.columns)
-        if missing:
-            raise ValueError(f"{label} prediction artifact is missing columns: {sorted(missing)}")
-        if frame["unix_ts"].duplicated().any():
-            raise ValueError(f"{label} prediction artifact contains duplicate timestamps")
-        if frame["unix_ts"].is_monotonic_increasing is False:
-            raise ValueError(f"{label} prediction timestamps are not chronological")
-
     if not baselines["unix_ts"].equals(models["unix_ts"]):
         raise ValueError("Baseline and model prediction artifacts use different timestamps")
-    if not np.array_equal(baselines["actual"].to_numpy(), models["actual"].to_numpy()):
-        raise ValueError("Baseline and model prediction artifacts have different actual values")
-
-    duplicate_methods = (set(baselines.columns) & set(models.columns)) - required
-    if duplicate_methods:
-        raise ValueError(f"Prediction method names appear in both artifacts: {sorted(duplicate_methods)}")
     return pd.concat(
         [
             baselines.reset_index(drop=True),
@@ -74,23 +58,31 @@ def select_validation_window(
     predictions: pd.DataFrame,
     week_number: int,
     day_of_week: int | None,
+    hour_range: tuple[int, int] | None = None,
     timezone: str = LOCAL_TIMEZONE,
 ) -> tuple[pd.DataFrame, pd.DatetimeIndex]:
-    """Select a local-calendar validation week and optionally one weekday."""
+    """Select a local-calendar validation week, weekday, and optional hour range."""
     if not 1 <= week_number <= 13:
         raise ValueError("week_number must be between 1 and 13")
     if day_of_week is not None and day_of_week not in DAY_NAMES:
         raise ValueError("day_of_week must be None or an integer from 1 (Monday) to 7 (Sunday)")
+    if hour_range is not None:
+        start_hour, end_hour = hour_range
+        if not (0 <= start_hour < end_hour <= 24):
+            raise ValueError("hour_range must be a pair with 0 <= start < end <= 24")
 
     utc_times = pd.to_datetime(predictions["unix_ts"], unit="s", utc=True)
     local_times = pd.DatetimeIndex(utc_times).tz_convert(timezone)
     local_dates = local_times.tz_localize(None).normalize()
-    elapsed_days = np.asarray((local_dates - local_dates[0]).days)
+    elapsed_days = (local_dates - local_dates[0]).days.to_numpy()
     week_numbers = elapsed_days // 7 + 1
     weekdays = local_times.dayofweek + 1
     mask = week_numbers == week_number
     if day_of_week is not None:
         mask &= weekdays == day_of_week
+    if hour_range is not None:
+        start_hour, end_hour = hour_range
+        mask &= (local_times.hour >= start_hour) & (local_times.hour < end_hour)
     selected = predictions.loc[mask].reset_index(drop=True)
     selected_times = local_times[mask]
     if selected.empty:
@@ -104,6 +96,7 @@ def plot_predictions(
     week_number: int,
     day_of_week: int | None,
     methods: list[str] | None = None,
+    hour_range: tuple[int, int] | None = None,
 ) -> Path:
     """Save small-multiple plots of actual values and selected predictions."""
     available = [column for column in predictions.columns if column in METHOD_LABELS]
@@ -129,10 +122,11 @@ def plot_predictions(
     formatter = mdates.DateFormatter("%a %d %H:%M %Z", tz=timezone)
 
     for ax, method in zip(axes.flat, selected_methods):
-        ax.plot(local_times, predictions["actual"], color="black", linewidth=0.8, label="Actual")
+        ax.plot(local_times, predictions["actual"], color=ACTUAL_COLOR, linewidth=0.8, label="Actual")
         ax.plot(
             local_times,
             predictions[method],
+            color=PREDICTION_COLOR,
             linewidth=0.75,
             label="Prediction",
         )
@@ -155,12 +149,16 @@ def plot_predictions(
     if day_of_week is not None:
         period += f", {DAY_NAMES[day_of_week]}"
         filename += f"_day_{day_of_week}_{DAY_NAMES[day_of_week].lower()}"
+    if hour_range is not None:
+        start_hour, end_hour = hour_range
+        period += f", {start_hour:02d}:00–{end_hour:02d}:00 local time"
+        filename += f"_hours_{start_hour:02d}-{end_hour:02d}"
     fig.suptitle(f"Actual and predicted water consumption — {period}")
     fig.tight_layout()
 
     FIG_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = FIG_DIR / f"{filename}.png"
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    output_path = FIG_DIR / f"{filename}.pdf"
+    fig.savefig(output_path, dpi=300, bbox_inches="tight", format="pdf")
     plt.close(fig)
     return output_path
 
@@ -172,6 +170,7 @@ def main() -> None:
         predictions,
         week_number=VALIDATION_WEEK,
         day_of_week=DAY_OF_WEEK,
+        hour_range=HOUR_RANGE,
     )
     output_path = plot_predictions(
         selected,
@@ -179,6 +178,7 @@ def main() -> None:
         week_number=VALIDATION_WEEK,
         day_of_week=DAY_OF_WEEK,
         methods=PREDICTIONS_TO_PLOT,
+        hour_range=HOUR_RANGE,
     )
     print(f"Validation prediction plot saved to {output_path.relative_to(REPO_ROOT)}")
 

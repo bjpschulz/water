@@ -2,24 +2,6 @@
 Reproducible EDA for the AMPds2 whole-house water (WHW) data, at native
 1-minute resolution.
 
-Purpose relative to the project's research questions (see AGENTS.md): this
-script quantifies (a) data integrity at the raw 1-minute grid, (b) the
-effect of the 2012 meter replacement, (c) the extent of zero-inflation and
-event structure in whole-house water consumption, and (d) autocorrelation
-at 1-minute lags.
-
-The Stage 4 validation comparison selected 60-minute blocks for modeling.
-This script remains at native 1-minute resolution for data-quality,
-consumption-structure, and autocorrelation analyses; those questions are
-distinct from the modeling target resolution.
-
-Timezone convention (settled fact, AGENTS.md): unix_ts is true Unix/UTC
-time and the household is in America/Vancouver. The master grid, lags,
-and the stored artifact are keyed by unix_ts (the UTC grid); calendar
-grouping (temporal profiles, calendar figures) and the stored
-datetime_local column use local time. A UTC datetime is derivable from
-unix_ts in one line and is not stored.
-
 Run: uv run python src/initial_eda.py
 
 Outputs:
@@ -29,11 +11,6 @@ Outputs:
   data/processed/whw_v100.csv       identical content as CSV, for inspection
   output/eda_whw/summary.json      all key numbers
   output/eda_whw/figs/*.png        figures
-
-The analysis period starts at V100_CLEAN_UNIX_TS, not at the meter-swap
-timestamp: the first V100 minutes contain one sub-pulse counter-settling
-artifact, after which all values sit exactly on the 0.5 L pulse grid. See
-the "clean_start" block in summary.json's meter_transition section.
 """
 
 #%%
@@ -69,8 +46,6 @@ LOCAL_TZ = "America/Vancouver"
 
 # Candidate lags for THIS (1-minute-resolution) analysis only. Chosen to
 # span short-run persistence (1-30 min) up to daily/weekly cycles.
-# These native-resolution lags remain for the autocorrelation analysis;
-# block-level modeling lags are derived separately in horizon_ablation.py.
 CANDIDATE_LAGS = [1, 5, 15, 30, 60, 1440, 10080]
 ACF_MAX_LAG = 10080  # one week, in minutes
 SECONDS_PER_MINUTE = 60
@@ -343,7 +318,6 @@ def acf_analysis(v100: pd.DataFrame) -> dict:
         "candidate_lags": at_lags(curve),
         "curve": curve.tolist(),
     }
-
 
 def make_figures(v100: pd.DataFrame, acf_result: dict, daily: pd.Series) -> None:
     """ Save all diagnostic figures for this EDA to FIG_DIR """
