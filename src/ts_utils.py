@@ -1,5 +1,8 @@
 """ Small, reusable time-series utilities shared across scripts in this project. """
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -26,6 +29,14 @@ def to_serializable(obj):
     if isinstance(obj, (pd.Timestamp,)):
         return obj.isoformat()
     return obj
+
+
+def write_summary(path: Path, summary: dict) -> None:
+    """Write a summary dict as indented JSON, creating the parent folder."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(to_serializable(summary), f, indent=2, allow_nan=False)
+        f.write("\n")
 
 
 def segment_runs(mask: np.ndarray):

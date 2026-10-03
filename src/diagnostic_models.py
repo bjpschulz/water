@@ -14,7 +14,6 @@ Run: uv run python src/diagnostic_models.py
 Output: output/diagnostic_models/summary.json
 """
 
-import json
 from pathlib import Path
 
 import lightgbm as lgb
@@ -24,7 +23,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from splits import load_features, split_series
-from ts_utils import mase, mase_scale, to_serializable
+from ts_utils import mase, mase_scale, write_summary
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO_ROOT / "output" / "diagnostic_models"
@@ -74,7 +73,6 @@ def fit_and_evaluate(splits: dict[str, pd.DataFrame], ) -> tuple[dict, pd.DataFr
     y_pred = linreg.predict(X_valid)
     predictions["linear_regression"] = y_pred
     models["linear_regression"] = {
-        "features": FEATURES_LINEAR,
         "params": "sklearn LinearRegression, default parameters",
         "mae": float(mean_absolute_error(y_valid, y_pred)),
         "rmse": float(np.sqrt(mean_squared_error(y_valid, y_pred))),
@@ -88,7 +86,6 @@ def fit_and_evaluate(splits: dict[str, pd.DataFrame], ) -> tuple[dict, pd.DataFr
     y_pred = gbm.predict(X_valid)
     predictions["lightgbm"] = y_pred
     models["lightgbm"] = {
-        "features": FEATURES_TREE,
         "params": LGBM_PARAMS,
         "mae": float(mean_absolute_error(y_valid, y_pred)),
         "rmse": float(np.sqrt(mean_squared_error(y_valid, y_pred))),
@@ -104,28 +101,8 @@ def fit_and_evaluate(splits: dict[str, pd.DataFrame], ) -> tuple[dict, pd.DataFr
     )
 
     return {
-        "purpose": (
-            "Diagnostic check: do calendar + lag features let a simple model "
-            "clear the naive/seasonal-naive floor by a real margin. Not a "
-            "final, tuned model -- see AGENTS.md Stage 3/4."
-        ),
-        "target": TARGET,
-        "resolution": "1-minute",
-        "evaluation_split": "validation",
-        "input_feature_table": "data/processed/whw_features_v1.parquet",
-        "baseline_summary_for_comparison": "output/baselines/summary.json",
-        "validation_predictions_file": "output/diagnostic_models/validation_predictions.parquet",
-        "split_rows": {name: len(frame) for name, frame in splits.items()},
-        "validation": {
-            "n_observations": len(valid),
-            "start_unix_ts": int(valid.index[0]),
-            "end_unix_ts": int(valid.index[-1]),
-        },
-        "mase": {
-            "definition": "validation MAE divided by training mean absolute one-step target difference",
-            "denominator": scale,
-            "denominator_split": "train",
-        },
+        "split": "validation",
+        "mase_scale": scale,
         "models": models,
     }, pred_frame
 
@@ -134,13 +111,9 @@ def main() -> None:
     """Run and save reproducible summary."""
     splits = split_series(load_features())
     summary, predictions = fit_and_evaluate(splits)
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    with OUT_JSON.open("w", encoding="utf-8") as f:
-        json.dump(to_serializable(summary), f, indent=2, allow_nan=False)
-        f.write("\n")
+    write_summary(OUT_JSON, summary)
     predictions.to_parquet(OUT_PREDICTIONS, index=False)
-    print(f"Diagnostic model metrics saved to {OUT_JSON.relative_to(REPO_ROOT)}")
-    print(f"Diagnostic model predictions saved to {OUT_PREDICTIONS.relative_to(REPO_ROOT)}")
+    print(f"Saved {OUT_JSON.relative_to(REPO_ROOT)}")
     for name, metrics in summary["models"].items():
         print(
             f"{name}: MAE={metrics['mae']:.6f}, RMSE={metrics['rmse']:.6f}, "

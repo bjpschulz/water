@@ -26,7 +26,8 @@ stage summaries and prediction artifacts live under `output/`.
 
 ## Reproducing the current stages
 
-Run commands from the repository root. The raw AMPds2 file must be present at
+Run commands from the repository root. `uv run python run_all.py` runs the
+stages below in order (except the plotter). The raw AMPds2 file must be present at
 `data/Water_WHW.csv`.
 
 ```sh
