@@ -38,7 +38,7 @@ cycles, lag warm-up rows excluded from train. Downstream stages must obtain
 splits via `split_series()` — never re-derive boundaries.
 
 Stage 2 (naive/rule baselines) is complete: all five baselines were
-evaluated on the chronological validation split using MAE, RMSE, and MASE.
+evaluated on the chronological validation split using MAE and RMSE.
 Exact scores and split metadata are in `output/baselines/summary.json`.
 
 Stage 3 (training-objective ablation) is run on the validation split: OLS
@@ -75,7 +75,5 @@ scope decisions") and weather (scope, per AGENTS.md Research Constraints).
 
 ## Evaluation metric
 
-Report MAE, RMSE, and MASE against all explicit naive baselines. At each
-resolution, MASE divides validation MAE by the training-only mean absolute
-one-step target difference (persistence error). See
+Report MAE and RMSE against all explicit naive baselines. See
 `AGENTS.md` → "Evaluation principles" for the settled rationale.

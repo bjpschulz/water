@@ -1,6 +1,12 @@
+"""Plot actual vs. predicted water consumption for one validation window.
+
+Usage: python src/plot_val_predictions.py --week 2 --day 2 --hours 16-22 --methods persistence linear_l2
+"""
+
+import argparse
+from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import matplotlib
 
@@ -9,20 +15,23 @@ matplotlib.use("Agg")
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.figure import Figure
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PREDICTIONS = REPO_ROOT / "output" / "baselines" / "validation_predictions.parquet"
 MODEL_PREDICTIONS = REPO_ROOT / "output" / "objective_ablation" / "validation_predictions.parquet"
 FIG_DIR = REPO_ROOT / "output" / "validation_predictions" / "figs"
 
-# Week numbers are counted from the start of the 13-week validation period.
-VALIDATION_WEEK = 2  # 1 through 13
-DAY_OF_WEEK = 2  # None = whole week; 1 = Monday through 7 = Sunday
-HOUR_RANGE = (16,22)  # None = all hours; e.g. (16, 22) = 16:00 through 21:59 local time
-PREDICTIONS_TO_PLOT = ["always_zero", "persistence", "linear_l2", "lightgbm_regression", "lightgbm_regression_l1"]  # None = all methods; otherwise use column names below
 LOCAL_TIMEZONE = "America/Vancouver"
-ACTUAL_COLOR = "tab:blue"
-PREDICTION_COLOR = "tab:orange"
+N_VALIDATION_WEEKS = 13
+DEFAULT_METHODS = [
+    "always_zero",
+    "persistence",
+    "linear_l1",
+    "linear_l2",
+    "lightgbm_regression_l1",
+    "lightgbm_regression",
+]
 
 METHOD_LABELS = {
     "always_zero": "Always zero",
@@ -37,103 +46,99 @@ METHOD_LABELS = {
     "lightgbm_huber": "LightGBM (Huber)",
     "lightgbm_poisson": "LightGBM (Poisson)",
 }
-DAY_NAMES = {day: name for day, name in enumerate(
-    ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
-    start=1,
-)}
+DAY_NAMES = dict(
+    enumerate(("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"), start=1)
+)
+
+
+@dataclass(frozen=True)
+class Window:
+    """Local-calendar slice of the validation period.
+
+    `week` counts from the start of validation (1-13); `day` is 1 (Monday) to 7 (Sunday)
+    or None for the whole week; `hours` is a local [start, end) hour range or None.
+    """
+
+    week: int
+    day: int | None = None
+    hours: tuple[int, int] | None = None
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.week <= N_VALIDATION_WEEKS:
+            raise ValueError(f"week must be between 1 and {N_VALIDATION_WEEKS}")
+        if self.day is not None and self.day not in DAY_NAMES:
+            raise ValueError("day must be None or an integer from 1 (Monday) to 7 (Sunday)")
+        if self.hours is not None and not 0 <= self.hours[0] < self.hours[1] <= 24:
+            raise ValueError("hours must satisfy 0 <= start < end <= 24")
+
+    def mask(self, local_time: pd.Series) -> pd.Series:
+        """Boolean mask of rows inside the window (local_time is tz-aware)."""
+        dates = local_time.dt.tz_localize(None).dt.normalize()
+        mask = (dates - dates.iloc[0]).dt.days // 7 + 1 == self.week
+        if self.day is not None:
+            mask &= local_time.dt.dayofweek + 1 == self.day
+        if self.hours is not None:
+            mask &= (local_time.dt.hour >= self.hours[0]) & (local_time.dt.hour < self.hours[1])
+        return mask
+
+    def title(self) -> str:
+        text = f"validation week {self.week}"
+        if self.day is not None:
+            text += f", {DAY_NAMES[self.day]}"
+        if self.hours is not None:
+            text += f", {self.hours[0]:02d}:00–{self.hours[1]:02d}:00 local time"
+        return text
+
+    def slug(self) -> str:
+        text = f"week_{self.week:02d}"
+        if self.day is not None:
+            text += f"_day_{self.day}_{DAY_NAMES[self.day].lower()}"
+        if self.hours is not None:
+            text += f"_hours_{self.hours[0]:02d}-{self.hours[1]:02d}"
+        return text
 
 
 def load_validation_predictions() -> pd.DataFrame:
-    """Load and align the baseline and objective-ablation prediction artifacts."""
+    """Load baseline and model predictions, aligned, with a tz-aware `local_time` column."""
     baselines = pd.read_parquet(BASELINE_PREDICTIONS)
     models = pd.read_parquet(MODEL_PREDICTIONS)
     if not baselines["unix_ts"].equals(models["unix_ts"]):
         raise ValueError("Baseline and model prediction artifacts use different timestamps")
-    return pd.concat(
+    predictions = pd.concat(
         [
             baselines.reset_index(drop=True),
             models.drop(columns=["unix_ts", "actual"]).reset_index(drop=True),
         ],
         axis=1,
     )
+    utc = pd.to_datetime(predictions["unix_ts"], unit="s", utc=True)
+    predictions["local_time"] = utc.dt.tz_convert(LOCAL_TIMEZONE)
+    return predictions
 
 
-def select_validation_window(
-    predictions: pd.DataFrame,
-    week_number: int,
-    day_of_week: int | None,
-    hour_range: tuple[int, int] | None = None,
-    timezone: str = LOCAL_TIMEZONE,
-) -> tuple[pd.DataFrame, pd.DatetimeIndex]:
-    """Select a local-calendar validation week, weekday, and optional hour range."""
-    if not 1 <= week_number <= 13:
-        raise ValueError("week_number must be between 1 and 13")
-    if day_of_week is not None and day_of_week not in DAY_NAMES:
-        raise ValueError("day_of_week must be None or an integer from 1 (Monday) to 7 (Sunday)")
-    if hour_range is not None:
-        start_hour, end_hour = hour_range
-        if not (0 <= start_hour < end_hour <= 24):
-            raise ValueError("hour_range must be a pair with 0 <= start < end <= 24")
-
-    utc_times = pd.to_datetime(predictions["unix_ts"], unit="s", utc=True)
-    local_times = pd.DatetimeIndex(utc_times).tz_convert(timezone)
-    local_dates = local_times.tz_localize(None).normalize()
-    elapsed_days = (local_dates - local_dates[0]).days.to_numpy()
-    week_numbers = elapsed_days // 7 + 1
-    weekdays = local_times.dayofweek + 1
-    mask = week_numbers == week_number
-    if day_of_week is not None:
-        mask &= weekdays == day_of_week
-    if hour_range is not None:
-        start_hour, end_hour = hour_range
-        mask &= (local_times.hour >= start_hour) & (local_times.hour < end_hour)
-    selected = predictions.loc[mask].reset_index(drop=True)
-    selected_times = local_times[mask]
-    if selected.empty:
-        raise ValueError("The requested week/day has no validation observations")
-    return selected, selected_times
-
-
-def plot_predictions(
-    predictions: pd.DataFrame,
-    local_times: pd.DatetimeIndex,
-    week_number: int,
-    day_of_week: int | None,
-    methods: list[str] | None = None,
-    hour_range: tuple[int, int] | None = None,
-) -> Path:
-    """Save small-multiple plots of actual values and selected predictions."""
-    available = [column for column in predictions.columns if column in METHOD_LABELS]
-    selected_methods = available if methods is None else methods
-    unknown = set(selected_methods) - set(available)
+def plot_predictions(predictions: pd.DataFrame, window: Window, methods: list[str]) -> Figure:
+    """Small multiples (two columns) of actual vs. predicted values inside `window`."""
+    unknown = set(methods) - (set(predictions.columns) & set(METHOD_LABELS))
     if unknown:
         raise ValueError(f"Requested prediction methods are unavailable: {sorted(unknown)}")
-    if not selected_methods:
+    if not methods:
         raise ValueError("At least one prediction method must be selected")
 
-    ncols = 2
-    nrows = ceil(len(selected_methods) / ncols)
-    fig, axes = plt.subplots(
-        nrows,
-        ncols,
-        figsize=(15, 3.2 * nrows),
-        sharex=True,
-        sharey=True,
-        squeeze=False,
-    )
-    timezone = ZoneInfo(LOCAL_TIMEZONE)
-    locator = mdates.AutoDateLocator(minticks=4, maxticks=9, tz=timezone)
-    formatter = mdates.DateFormatter("%a %d %H:%M %Z", tz=timezone)
+    data = predictions.loc[window.mask(predictions["local_time"])]
+    if data.empty:
+        raise ValueError("The requested window has no validation observations")
 
-    for ax, method in zip(axes.flat, selected_methods):
-        ax.plot(local_times, predictions["actual"], color=ACTUAL_COLOR, linewidth=0.8, label="Actual")
-        ax.plot(
-            local_times,
-            predictions[method],
-            color=PREDICTION_COLOR,
-            linewidth=0.75,
-            label="Prediction",
-        )
+    ncols = 2
+    nrows = ceil(len(methods) / ncols)
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(15, 3.2 * nrows), sharex=True, sharey=True, squeeze=False
+    )
+    locator = mdates.AutoDateLocator(minticks=4, maxticks=9, tz=LOCAL_TIMEZONE)
+    formatter = mdates.DateFormatter("%a %d %H:%M %Z", tz=LOCAL_TIMEZONE)
+
+    for ax, method in zip(axes.flat, methods):
+        ax.plot(data["local_time"], data["actual"], color="tab:blue", linewidth=0.8, label="Actual")
+        ax.plot(data["local_time"], data[method], color="tab:orange", linewidth=0.75, label="Prediction")
         ax.set_title(METHOD_LABELS[method])
         ax.set_ylabel("avg_rate (L/min)")
         ax.grid(True, alpha=0.25)
@@ -141,49 +146,37 @@ def plot_predictions(
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(formatter)
 
-    for ax in axes.flat[len(selected_methods):]:
+    for ax in axes.flat[len(methods):]:
         ax.set_visible(False)
     for ax in axes[-1, :]:
         if ax.get_visible():
             ax.set_xlabel(f"Local time ({LOCAL_TIMEZONE})")
     fig.autofmt_xdate(rotation=25, ha="right")
-
-    period = f"validation week {week_number}"
-    filename = f"week_{week_number:02d}"
-    if day_of_week is not None:
-        period += f", {DAY_NAMES[day_of_week]}"
-        filename += f"_day_{day_of_week}_{DAY_NAMES[day_of_week].lower()}"
-    if hour_range is not None:
-        start_hour, end_hour = hour_range
-        period += f", {start_hour:02d}:00–{end_hour:02d}:00 local time"
-        filename += f"_hours_{start_hour:02d}-{end_hour:02d}"
-    fig.suptitle(f"Actual and predicted water consumption — {period}")
+    fig.suptitle(f"Actual and predicted water consumption — {window.title()}")
     fig.tight_layout()
+    return fig
 
-    FIG_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = FIG_DIR / f"{filename}.pdf"
-    fig.savefig(output_path, dpi=300, bbox_inches="tight", format="pdf")
-    plt.close(fig)
-    return output_path
+
+def parse_hours(text: str) -> tuple[int, int]:
+    """Parse 'START-END' (e.g. '16-22') into an hour pair."""
+    start, end = text.split("-")
+    return int(start), int(end)
 
 
 def main() -> None:
-    """Plot the configured validation week/day for each available method."""
-    predictions = load_validation_predictions()
-    selected, local_times = select_validation_window(
-        predictions,
-        week_number=VALIDATION_WEEK,
-        day_of_week=DAY_OF_WEEK,
-        hour_range=HOUR_RANGE,
-    )
-    output_path = plot_predictions(
-        selected,
-        local_times,
-        week_number=VALIDATION_WEEK,
-        day_of_week=DAY_OF_WEEK,
-        methods=PREDICTIONS_TO_PLOT,
-        hour_range=HOUR_RANGE,
-    )
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--week", type=int, default=2, help="validation week, 1-13")
+    parser.add_argument("--day", type=int, help="1 (Monday) to 7 (Sunday); default whole week")
+    parser.add_argument("--hours", type=parse_hours, help="local hour range START-END, e.g. 16-22")
+    parser.add_argument("--methods", nargs="+", default=DEFAULT_METHODS, help="prediction columns")
+    args = parser.parse_args()
+
+    window = Window(args.week, args.day, args.hours)
+    fig = plot_predictions(load_validation_predictions(), window, args.methods)
+    FIG_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = FIG_DIR / f"{window.slug()}.pdf"
+    fig.savefig(output_path, dpi=300, bbox_inches="tight", format="pdf")
+    plt.close(fig)
     print(f"Validation prediction plot saved to {output_path.relative_to(REPO_ROOT)}")
 
 

@@ -4,7 +4,7 @@ Stage 3 training-objective ablation (1-minute resolution).
 Fits a linear regression and one untuned LightGBM on calendar + full lag-set
 features with different training losses -- features, split, and
 hyperparameters are identical, only the objective changes -- and evaluates
-every fit on the validation split with MAE, RMSE and MASE, plus the share of
+every fit on the validation split with MAE and RMSE, plus the share of
 exactly-zero predictions. The L2 fits are the plain diagnostic models.
 
 Linear: OLS (L2) vs. median regression (L1, statsmodels QuantReg q=0.5).
@@ -27,7 +27,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from splits import load_features, split_series
-from ts_utils import mase, mase_scale, write_summary
+from ts_utils import write_summary
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO_ROOT / "output" / "objective_ablation"
@@ -73,12 +73,11 @@ def fit_lgbm(X_train, y_train, X_valid, objective: str) -> np.ndarray:
     return model.fit(X_train, y_train).predict(X_valid)
 
 
-def score(y_true, y_pred, scale: float) -> dict:
-    """MAE, RMSE, MASE and share of zero predictions."""
+def score(y_true, y_pred) -> dict:
+    """MAE, RMSE and share of zero predictions."""
     return {
         "mae": float(mean_absolute_error(y_true, y_pred)),
         "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
-        "mase": mase(y_true, y_pred, scale),
         "zero_prediction_share": float(np.mean(np.abs(y_pred) < 1e-9)),
     }
 
@@ -86,7 +85,6 @@ def score(y_true, y_pred, scale: float) -> dict:
 def run(splits: dict[str, pd.DataFrame]) -> tuple[dict, pd.DataFrame]:
     """Fit every (model, objective) pair and score it on the validation split."""
     train, valid = splits["train"], splits["valid"]
-    scale = mase_scale(train[TARGET].to_numpy(dtype=np.float64))
     results, predictions = {}, {}
 
     Xl_train, y_train = _xy(train, FEATURES_LINEAR)
@@ -104,7 +102,7 @@ def run(splits: dict[str, pd.DataFrame]) -> tuple[dict, pd.DataFrame]:
         results[name] = {"objective": objective}
 
     for name, y_pred in predictions.items():
-        results[name].update(score(y_valid, y_pred, scale))
+        results[name].update(score(y_valid, y_pred))
 
     pred_frame = pd.DataFrame(
         {
@@ -113,7 +111,7 @@ def run(splits: dict[str, pd.DataFrame]) -> tuple[dict, pd.DataFrame]:
             **predictions,
         }
     )
-    summary = {"split": "validation", "mase_scale": scale, "models": results}
+    summary = {"split": "validation", "models": results}
     return summary, pred_frame
 
 
@@ -126,7 +124,7 @@ def main() -> None:
     for name, m in summary["models"].items():
         print(
             f"{name:22s} MAE={m['mae']:.4f} RMSE={m['rmse']:.4f} "
-            f"MASE={m['mase']:.4f} zero_pred={m['zero_prediction_share']:.3f}"
+            f"zero_pred={m['zero_prediction_share']:.3f}"
         )
 
 

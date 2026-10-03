@@ -123,9 +123,10 @@ never delete or rewrite one except to correct an error.
   prediction when the median is zero; this does not make it optimal among
   feature-conditioned rules. Results: `output/objective_ablation/summary.json`
   (`lightgbm_regression`).
-- **MASE denominator:** training-only mean absolute one-step target
-  difference at the same resolution (in-sample persistence error). Report
-  MAE and RMSE too; seasonal-naive forecasts remain explicit baselines.
+- **No MASE:** single series at a single fixed resolution, so a
+  scale-free metric adds nothing over MAE (it would be MAE divided by a
+  constant). Report MAE and RMSE; naive and seasonal-naive forecasts remain
+  explicit baselines.
 
 ## Temporal autocorrelation
 
@@ -179,7 +180,7 @@ in-memory; no split data artifacts are written.
 
 ### Stage 2 — Naive/rule baseline sweep (1-minute resolution, no fitting)
 
-Compute MAE, RMSE, and MASE on the validation set for each of:
+Compute MAE and RMSE on the validation set for each of:
 
 1. Always-zero: `y_hat_t = 0`
 2. Always-mean: `y_hat_t = mean(y_train)` (mean computed from train only)
@@ -191,8 +192,7 @@ No model fitting involved — these are fixed rules evaluated on held-out
 data. Save results reproducibly under `output/` (per Coding principles).
 
 Seasonal-naive convention (settled): fixed UTC-minute lags (`t-1440`,
-`t-10080`). They are explicit forecast baselines; the MASE denominator is
-the separate one-step persistence scale described under Evaluation principles.
+`t-10080`). They are explicit forecast baselines.
 
 ### Stage 3 — Training-objective ablation (1-minute resolution)
 
@@ -214,7 +214,7 @@ The L2 fits are the plain diagnostic models. Purpose: test whether these
 features let a model clear the naive/seasonal-naive floor by a real margin,
 and how the training loss changes that — not to produce a final tuned model.
 
-Every fit is scored on the Stage 2 validation split with MAE, RMSE and MASE
+Every fit is scored on the Stage 2 validation split with MAE and RMSE
 plus the share of exactly-zero predictions, and compared against the Stage 2
 baselines. Objectives are never matched to a "preferred" metric in advance:
 all models are compared on all metrics, and trade-offs (e.g. L1 vs. RMSE)
@@ -250,10 +250,8 @@ documentation of all results.
 
 ## Evaluation principles
 
-Report MAE and RMSE alongside MASE. MASE is scaled by the training-only
-mean absolute one-step difference at the same resolution. It is a
-relative-skill measure against persistence; report the individual naive
-baseline scores as well, and do not use MASE alone to rank models.
+Report MAE and RMSE, together with the individual naive baseline scores.
+Do not rank models on a single metric.
 
 Two considerations apply to all metrics:
 
@@ -262,9 +260,6 @@ Two considerations apply to all metrics:
   optimal feature-conditioned prediction rule. RMSE's optimal constant
   prediction is the training mean. Compare both metrics against both
   constant baselines and the lag-based naive baselines.
-- MASE's denominator is one-step persistence error on the training series,
-  rather than a held-out error or a seasonal-naive denominator. Seasonal
-  naive forecasts remain explicit baselines in their own right.
 
 ## Living documentation
 

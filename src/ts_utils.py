@@ -85,19 +85,3 @@ def distribution_summary(x) -> dict:
         "p99": float(np.percentile(x, 99)),
         "max": float(x.max()),
     }
-
-
-def mase_scale(y_train) -> float:
-    """Return the training-only mean absolute one-step difference."""
-    values = np.asarray(y_train, dtype=np.float64)
-    if len(values) < 2:
-        raise ValueError("At least two training targets are required for MASE")
-    scale = float(np.mean(np.abs(np.diff(values))))
-    if not np.isfinite(scale) or scale == 0:
-        raise ValueError("MASE scale must be finite and greater than zero")
-    return scale
-
-
-def mase(y_true, y_pred, scale: float) -> float:
-    """Return MAE divided by a training-only MASE scale."""
-    return float(np.mean(np.abs(np.asarray(y_true) - np.asarray(y_pred))) / scale)

@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from splits import load_features, split_series
-from ts_utils import mase, mase_scale, write_summary
+from ts_utils import write_summary
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO_ROOT / "output" / "baselines"
@@ -37,7 +37,6 @@ def calculate_baselines(
     y_train = train[TARGET].to_numpy(dtype=np.float64)
     y_valid = valid[TARGET].to_numpy(dtype=np.float64)
     train_mean = float(y_train.mean())
-    scale = mase_scale(y_train)
 
     predictions = {
         "always_zero": (np.zeros(len(valid)), "Predict 0 L/min for every row"),
@@ -61,14 +60,12 @@ def calculate_baselines(
         name: {
             "mae": float(mean_absolute_error(y_valid, y_pred)),
             "rmse": float(np.sqrt(mean_squared_error(y_valid, y_pred))),
-            "mase": mase(y_valid, y_pred, scale),
         }
         for name, (y_pred, _) in predictions.items()
     }
     return {
         "split": "validation",
         "train_target_mean": train_mean,
-        "mase_scale": scale,
         "baselines": results,
     }, pred_frame
 
@@ -82,8 +79,7 @@ def main() -> None:
     print(f"Saved {OUT_JSON.relative_to(REPO_ROOT)}")
     for name, metrics in summary["baselines"].items():
         print(
-            f"{name}: MAE={metrics['mae']:.6f}, RMSE={metrics['rmse']:.6f}, "
-            f"MASE={metrics['mase']:.6f}"
+            f"{name}: MAE={metrics['mae']:.6f}, RMSE={metrics['rmse']:.6f}"
         )
 
 
