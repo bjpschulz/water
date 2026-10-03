@@ -12,14 +12,14 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PREDICTIONS = REPO_ROOT / "output" / "baselines" / "validation_predictions.parquet"
-MODEL_PREDICTIONS = REPO_ROOT / "output" / "diagnostic_models" / "validation_predictions.parquet"
+MODEL_PREDICTIONS = REPO_ROOT / "output" / "objective_ablation" / "validation_predictions.parquet"
 FIG_DIR = REPO_ROOT / "output" / "validation_predictions" / "figs"
 
 # Week numbers are counted from the start of the 13-week validation period.
 VALIDATION_WEEK = 2  # 1 through 13
 DAY_OF_WEEK = 2  # None = whole week; 1 = Monday through 7 = Sunday
 HOUR_RANGE = (16,22)  # None = all hours; e.g. (16, 22) = 16:00 through 21:59 local time
-PREDICTIONS_TO_PLOT = ["always_zero", "persistence", "linear_regression", "lightgbm"]  # None = all methods; otherwise use column names below
+PREDICTIONS_TO_PLOT = ["always_zero", "persistence", "linear_l2", "lightgbm_regression", "lightgbm_regression_l1"]  # None = all methods; otherwise use column names below
 LOCAL_TIMEZONE = "America/Vancouver"
 ACTUAL_COLOR = "tab:blue"
 PREDICTION_COLOR = "tab:orange"
@@ -30,8 +30,12 @@ METHOD_LABELS = {
     "persistence": "Persistence (1 minute)",
     "seasonal_naive_daily": "Daily seasonal naive",
     "seasonal_naive_weekly": "Weekly seasonal naive",
-    "linear_regression": "Linear regression",
-    "lightgbm": "LightGBM",
+    "linear_l2": "Linear regression (L2)",
+    "linear_l1": "Linear regression (L1)",
+    "lightgbm_regression": "LightGBM (L2)",
+    "lightgbm_regression_l1": "LightGBM (L1)",
+    "lightgbm_huber": "LightGBM (Huber)",
+    "lightgbm_poisson": "LightGBM (Poisson)",
 }
 DAY_NAMES = {day: name for day, name in enumerate(
     ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
@@ -40,7 +44,7 @@ DAY_NAMES = {day: name for day, name in enumerate(
 
 
 def load_validation_predictions() -> pd.DataFrame:
-    """Load and align the baseline and diagnostic-model prediction artifacts."""
+    """Load and align the baseline and objective-ablation prediction artifacts."""
     baselines = pd.read_parquet(BASELINE_PREDICTIONS)
     models = pd.read_parquet(MODEL_PREDICTIONS)
     if not baselines["unix_ts"].equals(models["unix_ts"]):

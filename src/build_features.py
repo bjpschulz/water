@@ -5,7 +5,7 @@ Every feature is a deterministic row-wise transform -- backward shifts of
 the target (lags) or pure functions of the timestamp (calendar) -- so
 building the table on the full series *before* splitting is leakage-safe.
 
-Feature groups (justifications measured in output/eda_whw/summary.json):
+Feature groups (justifications measured in output/initial_eda/summary.json):
 
   lags       lag_1, lag_5, lag_15, lag_30, lag_60, lag_1440, lag_10080
              The occurrence lag (occ_lag_1) is NOT built yet.
@@ -20,8 +20,8 @@ and also for tree models if they are to be compared.
 Run: uv run python src/build_features.py
 
 Outputs:
-  data/processed/whw_features_v1.parquet   feature table (index unix_ts)
-  data/processed/whw_features_v1.csv       identical content, for skimming
+  output/build_features/whw_v100_with_features.parquet feature table (index unix_ts)
+  output/build_features/whw_v100_with_features.csv     identical content, for skimming
 """
 
 #%%
@@ -34,9 +34,10 @@ import pandas as pd
 from ts_utils import to_serializable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-IN_PARQUET = REPO_ROOT / "data" / "processed" / "whw_v100.parquet"
-OUT_PARQUET = REPO_ROOT / "data" / "processed" / "whw_features_v1.parquet"
-OUT_CSV = REPO_ROOT / "data" / "processed" / "whw_features_v1.csv"  # twin, for quick skimming
+IN_PARQUET = REPO_ROOT / "output" / "initial_eda" / "whw_v100.parquet"
+OUT_DIR = REPO_ROOT / "output" / "build_features"
+OUT_PARQUET = OUT_DIR / "whw_v100_with_features.parquet"
+OUT_CSV = OUT_DIR / "whw_v100_with_features.csv"  # twin, for quick skimming
 
 # Lag set from AGENTS.md ("Temporal autocorrelation" / Stage 3), in minutes.
 LAGS = [1, 5, 15, 30, 60, 1440, 10080]

@@ -16,13 +16,12 @@ them by their role in the workflow:
 | `src/build_features.py` | Build the versioned 1-minute lag and calendar feature table. |
 | `src/splits.py` | Shared chronological train/validation/test split. |
 | `src/baselines.py` | Evaluate the Stage 2 naive baselines. |
-| `src/diagnostic_models.py` | Evaluate Stage 3 linear regression and LightGBM models. |
-| `src/objective_ablation.py` | Compare training objectives (L2/L1/Huber/Poisson) for Stage 4. |
+| `src/objective_ablation.py` | Compare training objectives (L2/L1/Huber/Poisson) for Stage 3 (incl. the plain L2 diagnostic models). |
 | `src/plot_val_predictions.py` | Plot validation actuals against saved Stage 2/3 predictions. |
 | `src/ts_utils.py` | Shared time-series and serialization helpers. |
 
-Tests are under `tests/`. Superseded experiments (horizon ablation) are kept in `archive/`. Local input and processed data live under `data/`;
-stage summaries and prediction artifacts live under `output/`.
+Tests are under `tests/`. Superseded experiments (horizon ablation) are kept in `archive/`. The raw input lives in `data/`; every
+stage writes its artifacts (tables, summaries, predictions) to `output/<stage>/`.
 
 ## Reproducing the current stages
 
@@ -35,12 +34,11 @@ uv sync
 uv run python src/initial_eda.py
 uv run python src/build_features.py
 uv run python src/baselines.py
-uv run python src/diagnostic_models.py
 uv run python src/objective_ablation.py
 uv run python src/plot_val_predictions.py
 ```
 
-The baseline and diagnostic-model scripts write both `summary.json` and
+The baseline and objective-ablation scripts write both `summary.json` and
 `validation_predictions.parquet` in their respective `output/` folders.
 The plotter reads those saved predictions; it does not refit models. Edit
 `VALIDATION_WEEK`, `DAY_OF_WEEK`, `HOUR_RANGE`, or `PREDICTIONS_TO_PLOT` near

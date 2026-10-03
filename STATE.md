@@ -16,7 +16,7 @@ Rules, protocol, and anything that shouldn't change session-to-session
 live in AGENTS.md, not here.
 
 Last updated: decided against the horizon ablation (coarsening the target
-is not an informative comparison); Stage 4 is now a training-objective
+is not an informative comparison); Stage 3 is now a training-objective
 ablation at 1-minute resolution (run; interpretation open).
 
 ## Where we are
@@ -26,7 +26,7 @@ transition, target distribution, event structure, temporal profiles
 (America/Vancouver local time), ACF (raw), timezone
 verification (emitted as the `timezone` block in summary.json), and a
 leakage-safe candidate feature set — all reproducible from
-`src/initial_eda.py` → `output/eda_whw/summary.json`.
+`src/initial_eda.py` → `output/initial_eda/summary.json`.
 
 The feature table itself is now built: lags (1, 5, 15, 30, 60, 1440, 10080)
 plus calendar features in both raw and cyclic encodings (local
@@ -41,25 +41,20 @@ Stage 2 (naive/rule baselines) is complete: all five baselines were
 evaluated on the chronological validation split using MAE, RMSE, and MASE.
 Exact scores and split metadata are in `output/baselines/summary.json`.
 
-Stage 3 (diagnostic models) is complete: linear regression and untuned
-LightGBM were evaluated on the same validation split. LightGBM's MAE is
-slightly below always-zero but remains above persistence; zero is the
-optimal constant prediction, not necessarily the optimal feature-conditioned
-rule. Results are in `output/diagnostic_models/summary.json`.
-
-Stage 4 (training-objective ablation) is run on the validation split: OLS
+Stage 3 (training-objective ablation) is run on the validation split: OLS
 vs. L1 linear regression and LightGBM with L2 / L1 / Huber / Poisson
-objectives. Results (all metrics, zero-prediction share) are in
-`output/objective_ablation/summary.json`; interpretation is still open. The
-earlier horizon-aggregation ablation was dropped; its script and results are
-archived in `archive/horizon_ablation/`. The final test split remains
-untouched.
+objectives; the L2 fits are the plain diagnostic models (LightGBM L2 sits
+slightly below always-zero MAE but above persistence). Results (all metrics,
+zero-prediction share) are in `output/objective_ablation/summary.json`;
+interpretation of the other objectives is still open. The earlier
+horizon-aggregation ablation was dropped; its script and results are archived
+in `archive/horizon_ablation/`. The final test split remains untouched.
 
 ## Immediate next steps
 
-1. Interpret the Stage 4 results across all metrics (not just MAE) and decide
-   which objective(s) carry into Stage 5; record the conclusion in AGENTS.md.
-2. Stage 5: feature-group ablation at 1-minute resolution with the chosen
+1. Interpret the Stage 3 results across all metrics (not just MAE) and decide
+   which objective(s) carry into Stage 4; record the conclusion in AGENTS.md.
+2. Stage 4: feature-group ablation at 1-minute resolution with the chosen
    objective(s); then one evaluation on the test period, feature importance,
    residual ACF, light tuning.
 
@@ -72,7 +67,7 @@ known calendar features and earlier lags only.
 
 Calendar features (hour, day-of-week, weekend; cyclic encodings for linear
 regression, raw for LightGBM) and lags 1, 5, 15, 30, 60, 1440, 10080 from
-`data/processed/whw_features_v1.parquet`. Still subject to the Stage 5
+`output/build_features/whw_v100_with_features.parquet`. Still subject to the Stage 4
 feature-group ablation.
 
 Deliberately excluded: rolling statistics (AGENTS.md "Settled facts &

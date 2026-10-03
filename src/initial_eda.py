@@ -5,12 +5,12 @@ Reproducible EDA for the AMPds2 whole-house water (WHW) data, at native
 Run: uv run python src/initial_eda.py
 
 Outputs:
-  data/processed/whw_v100.parquet   cleaned analysis period (1-min grid;
+  output/initial_eda/whw_v100.parquet cleaned analysis period (1-min grid;
                                     index unix_ts, columns datetime_local,
                                     counter, avg_rate)
-  data/processed/whw_v100.csv       identical content as CSV, for inspection
-  output/eda_whw/summary.json      all key numbers
-  output/eda_whw/figs/*.png        figures
+  output/initial_eda/whw_v100.csv     identical content as CSV, for inspection
+  output/initial_eda/summary.json      all key numbers
+  output/initial_eda/figs/*.png        figures
 """
 
 #%%
@@ -31,9 +31,9 @@ from ts_utils import distribution_summary, segment_runs, to_serializable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = REPO_ROOT / "data" / "Water_WHW.csv"
-PARQUET_PATH = REPO_ROOT / "data" / "processed" / "whw_v100.parquet"
-CSV_PATH = REPO_ROOT / "data" / "processed" / "whw_v100.csv"  # twin of the parquet, for eyeballing
-OUT_DIR = REPO_ROOT / "output" / "eda_whw"
+OUT_DIR = REPO_ROOT / "output" / "initial_eda"
+PARQUET_PATH = OUT_DIR / "whw_v100.parquet"
+CSV_PATH = OUT_DIR / "whw_v100.csv"  # twin of the parquet, for eyeballing
 FIG_DIR = OUT_DIR / "figs"
 
 V100_UNIX_TS = 1_342_287_780  # 2012-07-14: documented switch to the V100 water meter

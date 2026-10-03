@@ -1,19 +1,20 @@
 """
-Stage 4 training-objective ablation (1-minute resolution).
+Stage 3 training-objective ablation (1-minute resolution).
 
-Refits the Stage 3 linear regression and untuned LightGBM with different
-training losses -- features, split, and hyperparameters are identical, only
-the objective changes -- and evaluates every fit on the validation split with
-MAE, RMSE and MASE, plus the share of exactly-zero predictions.
+Fits a linear regression and one untuned LightGBM on calendar + full lag-set
+features with different training losses -- features, split, and
+hyperparameters are identical, only the objective changes -- and evaluates
+every fit on the validation split with MAE, RMSE and MASE, plus the share of
+exactly-zero predictions. The L2 fits are the plain diagnostic models.
 
 Linear: OLS (L2) vs. median regression (L1, statsmodels QuantReg q=0.5).
 LightGBM: regression (L2), regression_l1, huber (LightGBM default alpha),
 poisson. Every model is scored on every metric; no objective is paired with
-"its" metric in advance (AGENTS.md, Stage 4).
+"its" metric in advance (AGENTS.md, Stage 3).
 
 Run: uv run python src/objective_ablation.py
-Output: output/objective_ablation/summary.json (metrics; LightGBM params are
-the Stage 3 LGBM_PARAMS) and validation_predictions.parquet
+Output: output/objective_ablation/summary.json (metrics) and
+validation_predictions.parquet (one column per fitted model)
 """
 
 from pathlib import Path
@@ -25,7 +26,6 @@ import statsmodels.api as sm
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-from diagnostic_models import FEATURES_LINEAR, FEATURES_TREE, LGBM_PARAMS, TARGET, _xy
 from splits import load_features, split_series
 from ts_utils import mase, mase_scale, write_summary
 
@@ -34,7 +34,29 @@ OUT_DIR = REPO_ROOT / "output" / "objective_ablation"
 OUT_JSON = OUT_DIR / "summary.json"
 OUT_PREDICTIONS = OUT_DIR / "validation_predictions.parquet"
 
+TARGET = "avg_rate"
+
+# Full 1-minute lag set from AGENTS.md / build_features.py.
+LAG_COLS = ["lag_1", "lag_5", "lag_15", "lag_30", "lag_60", "lag_1440", "lag_10080"]
+FEATURES_LINEAR = ["hour_sin", "hour_cos", "dow_sin", "dow_cos", "weekend"] + LAG_COLS
+FEATURES_TREE = ["hour", "dow_local", "weekend"] + LAG_COLS
+
+# Untuned by design: fixed values and seed, no search.
+LGBM_PARAMS = {
+    "n_estimators": 100,
+    "num_leaves": 31,
+    "learning_rate": 0.1,
+    "random_state": 42,
+    "verbosity": -1,
+}
 LGBM_OBJECTIVES = ["regression", "regression_l1", "huber", "poisson"]
+
+
+def _xy(frame: pd.DataFrame, features: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """Extract (X, y) as float64 arrays for a given feature list."""
+    X = frame[features].astype(np.float64).to_numpy()
+    y = frame[TARGET].to_numpy(dtype=np.float64)
+    return X, y
 
 
 def fit_linear(X_train, y_train, X_valid, loss: str) -> np.ndarray:
@@ -46,7 +68,7 @@ def fit_linear(X_train, y_train, X_valid, loss: str) -> np.ndarray:
 
 
 def fit_lgbm(X_train, y_train, X_valid, objective: str) -> np.ndarray:
-    """Untuned LightGBM (Stage 3 params) with the given objective."""
+    """Untuned LightGBM with the given objective."""
     model = lgb.LGBMRegressor(objective=objective, **LGBM_PARAMS)
     return model.fit(X_train, y_train).predict(X_valid)
 
