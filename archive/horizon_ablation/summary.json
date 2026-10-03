@@ -1,0 +1,373 @@
+{
+  "input": "data/processed/whw_v100.parquet",
+  "evaluation_split": "validation",
+  "split_protocol": "Chronological; validation and test each span 13 local weeks, with boundaries at Monday 00:00 America/Vancouver",
+  "calendar_timezone": "America/Vancouver",
+  "seasonal_naive_convention": "fixed UTC-minute lags converted to whole blocks",
+  "mase_definition": "validation MAE divided by the training-only mean absolute one-block difference; computed separately per horizon",
+  "horizons": {
+    "15": {
+      "horizon_minutes": 15,
+      "target": "sum(avg_rate) over block; liters per block",
+      "zero_target_proportion_train": 0.5368655323425946,
+      "aggregation": {
+        "alignment": "fixed UTC Unix epoch boundaries; right-closed interval increments",
+        "aggregation": "sum of 1-minute avg_rate values; liters consumed per block",
+        "input_rows": 900417,
+        "complete_blocks": 60026,
+        "excluded_incomplete_edge_rows": 27,
+        "first_block_start_unix_ts": 1342311300,
+        "last_block_start_unix_ts": 1396333800
+      },
+      "lag_blocks": [
+        1,
+        2,
+        4,
+        96,
+        672
+      ],
+      "split_rows": {
+        "train": 41787,
+        "valid": 8740,
+        "test": 8827
+      },
+      "validation": {
+        "n_observations": 8740,
+        "start_unix_ts": 1380524400,
+        "end_unix_ts": 1388389500
+      },
+      "mase": {
+        "definition": "validation MAE divided by training mean absolute one-block target difference",
+        "denominator": 9.390058871392332,
+        "denominator_split": "train"
+      },
+      "baselines": {
+        "always_zero": {
+          "definition": "Predict zero liters for every block",
+          "mae": 7.501773455377575,
+          "rmse": 18.150561357004104,
+          "mase": 0.7989059023082815,
+          "mae_per_minute": 0.500118230358505,
+          "rmse_per_minute": 1.2100374238002736
+        },
+        "always_mean": {
+          "definition": "Predict the training mean block volume",
+          "mae": 10.507864953291781,
+          "rmse": 16.56463959100196,
+          "mase": 1.11904143490569,
+          "mae_per_minute": 0.700524330219452,
+          "rmse_per_minute": 1.1043093060667972
+        },
+        "persistence": {
+          "definition": "Predict from the previous completed block",
+          "mae": 8.367734553775744,
+          "rmse": 17.8360236997702,
+          "mase": 0.8911269533430517,
+          "mae_per_minute": 0.5578489702517163,
+          "rmse_per_minute": 1.1890682466513467
+        },
+        "seasonal_naive_daily": {
+          "definition": "Predict from 96 blocks earlier (15-minute UTC day)",
+          "mae": 10.29433638443936,
+          "rmse": 20.992013164649205,
+          "mase": 1.0963015807922132,
+          "mae_per_minute": 0.6862890922959574,
+          "rmse_per_minute": 1.399467544309947
+        },
+        "seasonal_naive_weekly": {
+          "definition": "Predict from 672 blocks earlier (15-minute UTC week)",
+          "mae": 9.934267734553776,
+          "rmse": 20.26361098634569,
+          "mase": 1.0579558521000785,
+          "mae_per_minute": 0.6622845156369184,
+          "rmse_per_minute": 1.3509073990897127
+        }
+      },
+      "models": {
+        "linear_regression": {
+          "features": [
+            "hour_sin",
+            "hour_cos",
+            "dow_sin",
+            "dow_cos",
+            "weekend",
+            "lag_1_block",
+            "lag_2_block",
+            "lag_4_block",
+            "lag_96_block",
+            "lag_672_block"
+          ],
+          "params": "sklearn LinearRegression, default parameters",
+          "mae": 8.305835260785225,
+          "rmse": 14.605668610639206,
+          "mase": 0.8845349506902142,
+          "mae_per_minute": 0.553722350719015,
+          "rmse_per_minute": 0.9737112407092804
+        },
+        "lightgbm": {
+          "features": [
+            "hour",
+            "dow_local",
+            "weekend",
+            "lag_1_block",
+            "lag_2_block",
+            "lag_4_block",
+            "lag_96_block",
+            "lag_672_block"
+          ],
+          "params": {
+            "n_estimators": 100,
+            "num_leaves": 31,
+            "learning_rate": 0.1,
+            "random_state": 42,
+            "verbosity": -1
+          },
+          "mae": 7.768224334421971,
+          "rmse": 14.083435371850788,
+          "mase": 0.8272817498608632,
+          "mae_per_minute": 0.5178816222947981,
+          "rmse_per_minute": 0.9388956914567193
+        }
+      }
+    },
+    "30": {
+      "horizon_minutes": 30,
+      "target": "sum(avg_rate) over block; liters per block",
+      "zero_target_proportion_train": 0.421002249557268,
+      "aggregation": {
+        "alignment": "fixed UTC Unix epoch boundaries; right-closed interval increments",
+        "aggregation": "sum of 1-minute avg_rate values; liters consumed per block",
+        "input_rows": 900417,
+        "complete_blocks": 30012,
+        "excluded_incomplete_edge_rows": 57,
+        "first_block_start_unix_ts": 1342312200,
+        "last_block_start_unix_ts": 1396332000
+      },
+      "lag_blocks": [
+        1,
+        2,
+        48,
+        336
+      ],
+      "split_rows": {
+        "train": 20893,
+        "valid": 4370,
+        "test": 4413
+      },
+      "validation": {
+        "n_observations": 4370,
+        "start_unix_ts": 1380524400,
+        "end_unix_ts": 1388388600
+      },
+      "mase": {
+        "definition": "validation MAE divided by training mean absolute one-block target difference",
+        "denominator": 18.219892781926095,
+        "denominator_split": "train"
+      },
+      "baselines": {
+        "always_zero": {
+          "definition": "Predict zero liters for every block",
+          "mae": 15.00354691075515,
+          "rmse": 31.53819285716371,
+          "mase": 0.8234706477328165,
+          "mae_per_minute": 0.500118230358505,
+          "rmse_per_minute": 1.0512730952387903
+        },
+        "always_mean": {
+          "definition": "Predict the training mean block volume",
+          "mae": 18.91164790173666,
+          "rmse": 27.82867503723812,
+          "mase": 1.0379670247289698,
+          "mae_per_minute": 0.630388263391222,
+          "rmse_per_minute": 0.9276225012412707
+        },
+        "persistence": {
+          "definition": "Predict from the previous completed block",
+          "mae": 16.06990846681922,
+          "rmse": 31.148073133891177,
+          "mase": 0.8819979710726052,
+          "mae_per_minute": 0.5356636155606407,
+          "rmse_per_minute": 1.0382691044630392
+        },
+        "seasonal_naive_daily": {
+          "definition": "Predict from 48 blocks earlier (30-minute UTC day)",
+          "mae": 17.714988558352402,
+          "rmse": 33.23845526595391,
+          "mase": 0.9722882988601035,
+          "mae_per_minute": 0.5904996186117467,
+          "rmse_per_minute": 1.1079485088651304
+        },
+        "seasonal_naive_weekly": {
+          "definition": "Predict from 336 blocks earlier (30-minute UTC week)",
+          "mae": 16.778146453089246,
+          "rmse": 31.34785730946753,
+          "mase": 0.9208696589989243,
+          "mae_per_minute": 0.5592715484363082,
+          "rmse_per_minute": 1.044928576982251
+        }
+      },
+      "models": {
+        "linear_regression": {
+          "features": [
+            "hour_sin",
+            "hour_cos",
+            "dow_sin",
+            "dow_cos",
+            "weekend",
+            "lag_1_block",
+            "lag_2_block",
+            "lag_48_block",
+            "lag_336_block"
+          ],
+          "params": "sklearn LinearRegression, default parameters",
+          "mae": 15.131628783651314,
+          "rmse": 24.252530420673857,
+          "mase": 0.830500429654652,
+          "mae_per_minute": 0.5043876261217105,
+          "rmse_per_minute": 0.8084176806891286
+        },
+        "lightgbm": {
+          "features": [
+            "hour",
+            "dow_local",
+            "weekend",
+            "lag_1_block",
+            "lag_2_block",
+            "lag_48_block",
+            "lag_336_block"
+          ],
+          "params": {
+            "n_estimators": 100,
+            "num_leaves": 31,
+            "learning_rate": 0.1,
+            "random_state": 42,
+            "verbosity": -1
+          },
+          "mae": 13.632094693457487,
+          "rmse": 22.815262412264243,
+          "mase": 0.7481984036141175,
+          "mae_per_minute": 0.4544031564485829,
+          "rmse_per_minute": 0.7605087470754748
+        }
+      }
+    },
+    "60": {
+      "horizon_minutes": 60,
+      "target": "sum(avg_rate) over block; liters per block",
+      "zero_target_proportion_train": 0.302316676239709,
+      "aggregation": {
+        "alignment": "fixed UTC Unix epoch boundaries; right-closed interval increments",
+        "aggregation": "sum of 1-minute avg_rate values; liters consumed per block",
+        "input_rows": 900417,
+        "complete_blocks": 15005,
+        "excluded_incomplete_edge_rows": 117,
+        "first_block_start_unix_ts": 1342314000,
+        "last_block_start_unix_ts": 1396328400
+      },
+      "lag_blocks": [
+        1,
+        24,
+        168
+      ],
+      "split_rows": {
+        "train": 10446,
+        "valid": 2185,
+        "test": 2206
+      },
+      "validation": {
+        "n_observations": 2185,
+        "start_unix_ts": 1380524400,
+        "end_unix_ts": 1388386800
+      },
+      "mase": {
+        "definition": "validation MAE divided by training mean absolute one-block target difference",
+        "denominator": 35.12781235040689,
+        "denominator_split": "train"
+      },
+      "baselines": {
+        "always_zero": {
+          "definition": "Predict zero liters for every block",
+          "mae": 30.0070938215103,
+          "rmse": 55.01342565491018,
+          "mase": 0.8542260907734188,
+          "mae_per_minute": 0.500118230358505,
+          "rmse_per_minute": 0.9168904275818364
+        },
+        "always_mean": {
+          "definition": "Predict the training mean block volume",
+          "mae": 34.20384915163568,
+          "rmse": 46.32056759681831,
+          "mase": 0.9736971038915121,
+          "mae_per_minute": 0.5700641525272613,
+          "rmse_per_minute": 0.7720094599469718
+        },
+        "persistence": {
+          "definition": "Predict from the previous completed block",
+          "mae": 30.588329519450802,
+          "rmse": 53.32730312495875,
+          "mase": 0.8707724014899121,
+          "mae_per_minute": 0.5098054919908467,
+          "rmse_per_minute": 0.8887883854159793
+        },
+        "seasonal_naive_daily": {
+          "definition": "Predict from 24 blocks earlier (60-minute UTC day)",
+          "mae": 29.253318077803204,
+          "rmse": 51.51669987618309,
+          "mase": 0.8327680012064389,
+          "mae_per_minute": 0.4875553012967201,
+          "rmse_per_minute": 0.8586116646030515
+        },
+        "seasonal_naive_weekly": {
+          "definition": "Predict from 168 blocks earlier (60-minute UTC week)",
+          "mae": 27.234553775743706,
+          "rmse": 47.62526419321665,
+          "mase": 0.7752988857966341,
+          "mae_per_minute": 0.45390922959572844,
+          "rmse_per_minute": 0.7937544032202776
+        }
+      },
+      "models": {
+        "linear_regression": {
+          "features": [
+            "hour_sin",
+            "hour_cos",
+            "dow_sin",
+            "dow_cos",
+            "weekend",
+            "lag_1_block",
+            "lag_24_block",
+            "lag_168_block"
+          ],
+          "params": "sklearn LinearRegression, default parameters",
+          "mae": 25.791632335866883,
+          "rmse": 38.64128608057359,
+          "mase": 0.7342225607046131,
+          "mae_per_minute": 0.4298605389311147,
+          "rmse_per_minute": 0.6440214346762265
+        },
+        "lightgbm": {
+          "features": [
+            "hour",
+            "dow_local",
+            "weekend",
+            "lag_1_block",
+            "lag_24_block",
+            "lag_168_block"
+          ],
+          "params": {
+            "n_estimators": 100,
+            "num_leaves": 31,
+            "learning_rate": 0.1,
+            "random_state": 42,
+            "verbosity": -1
+          },
+          "mae": 22.307406920692735,
+          "rmse": 35.81677748686358,
+          "mase": 0.6350354726953085,
+          "mae_per_minute": 0.37179011534487894,
+          "rmse_per_minute": 0.5969462914477263
+        }
+      }
+    }
+  }
+}
