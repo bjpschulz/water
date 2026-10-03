@@ -94,7 +94,8 @@ documenting the meter change (verified reproducibly; see
 `meter_transition.clean_start` in `output/eda_whw/summary.json`).
 
 The cumulative `counter` can potentially be retained for validation, but `avg_rate` is the
-primary interval-level modelling quantity, at its native 1-minute resolution.
+primary interval-level modelling quantity, at whatever resolution the horizon decision
+(see STATE.md) settles on.
 
 ## Settled facts & scope decisions
 
@@ -123,6 +124,11 @@ never delete or rewrite one except to correct an error.
   below always-zero but above persistence. Zero is the MAE-optimal constant
   prediction when the median is zero; this does not make it optimal among
   feature-conditioned rules. Results: `output/diagnostic_models/summary.json`.
+- **60-minute block volume selected for Stage 5 modeling** based on the
+  Stage 4 validation comparison. LightGBM beats the naive baselines at this
+  resolution and has the lowest MAE/RMSE per minute among the tested
+  models and baselines. The final test split remains untouched. Results:
+  `output/horizon_ablation/summary.json`.
 - **MASE denominator:** training-only mean absolute one-step target
   difference at the same resolution (in-sample persistence error). Report
   MAE and RMSE too; seasonal-naive forecasts remain explicit baselines.
@@ -133,7 +139,7 @@ Temporal autocorrelation means observations close together in time are statistic
 
 **Resolution note:** the lag set below is in 1-minute units and remains
 operative for the *autocorrelation research question (RQ3)* regardless of
-the modeling target. RQ3 asks how strong the autocorrelation
+the 60-minute modeling target. RQ3 asks how strong the autocorrelation
 structure is at native resolution, which is separate from the modeling
 resolution for RQ1.
 
@@ -204,34 +210,50 @@ the same validation set as Stage 2. Purpose: test whether these features
 let a model clear the naive/seasonal-naive floor by a real margin — not to
 produce a final tuned model.
 
-### Stage 4 — Training-objective ablation (1-minute resolution)
+### Stage 4 — Horizon aggregation ablation
 
-Coarsening the target (block aggregation) was considered and rejected: it
-changes the prediction problem rather than the model, so gains over the
-baselines are not informative. The prediction task stays at 1-minute
-resolution. Stage 4 instead ablates the *training objective* of linear regression and
-LightGBM, with features, split, hyperparameters and seed identical to
-Stage 3 (only the loss changes). Fits:
+Stage 3 found only a small LightGBM improvement over always-zero MAE, and
+neither diagnostic model beat persistence on MAE. The completed ablation
+compared fixed 15-, 30-, and 60-minute targets; validation evidence selects
+60-minute blocks for the next modeling stage.
 
-- Linear regression: OLS (L2) and median regression (L1, `QuantReg` q=0.5).
-- LightGBM: `regression` (L2), `regression_l1`, `huber` (LightGBM default
-  `alpha`), `poisson`.
+For each horizon, sum the 1-minute `avg_rate` values in a complete,
+non-overlapping block. Since each increment is timestamped at its interval
+end, a block starting at `t` contains increments ending in `(t, t+h]`.
+The resulting target is consumed volume in liters per block. Blocks are
+aligned to fixed UTC epoch boundaries; incomplete edge blocks are excluded.
+Derive calendar features from each block's start timestamp in
+America/Vancouver. Predictions are issued at block start using only
+completed earlier blocks and known calendar features.
 
-Every fit is scored on the validation split with MAE, RMSE and MASE plus the
-share of exactly-zero predictions, and compared against the Stage 2
-baselines. Objectives are never matched to a "preferred" metric in advance:
-all models are compared on all metrics, and trade-offs (e.g. L1 vs. RMSE)
-are reported as found. Implemented in `src/objective_ablation.py` ->
-`output/objective_ablation/summary.json`. The superseded horizon-ablation
-script and results are kept under `archive/horizon_ablation/`.
+Use chronological train/validation/test splits aligned to Monday 00:00
+America/Vancouver, with the existing 13-week validation and test periods.
+Use the same five baselines as Stage 2: always-zero, training mean,
+one-block persistence, daily seasonal-naive, and weekly seasonal-naive.
+Seasonal lags are fixed UTC periods expressed in blocks (1440/horizon and
+10080/horizon). Diagnostic models remain linear regression and untuned
+LightGBM with calendar and feasible consumption-lag features. Convert the
+minute lag candidates (1, 5, 15, 30, 60, 1440, 10080) to whole-block lags
+when exactly representable; document the resulting feature list per
+horizon.
 
-### Stage 5+ — Feature ablation and full modeling (1-minute resolution)
+Measure the training-split zero-target proportion at every horizon. Report
+validation MAE and RMSE for every baseline and model, plus MASE. For each
+resolution, MASE's denominator is the mean absolute one-block difference of the
+training target series (the in-sample one-step persistence error); compute
+it from training targets only. Report MAE/RMSE alongside MASE: because
+the denominator varies by horizon, MASE alone does not rank resolutions.
+Also report MAE and RMSE divided by block length, which express block
+volume error per minute for a common-unit horizon comparison.
+Save the reproducible comparison under `output/horizon_ablation/`.
 
-Compare feature groups (lags in 1-minute units: recent = `lag_1`, daily = `lag_1440`, weekly = `lag_10080`):
+### Stage 5+ — Feature ablation and full modeling (60-minute resolution)
+
+Compare feature groups (lags are completed 60-minute block totals):
 
 1. Calendar/time features only
 2. Lag-only: recent, daily, and weekly consumption lags
-3. Calendar + recent lag (`lag_1`)
+3. Calendar + recent lag (`lag_1_block`)
 4. Calendar + recent, daily, and weekly lags
 
 This ablation directly tests how much predictive performance comes from
@@ -255,7 +277,7 @@ documentation of all results.
 Report MAE and RMSE alongside MASE. MASE is scaled by the training-only
 mean absolute one-step difference at the same resolution. It is a
 relative-skill measure against persistence; report the individual naive
-baseline scores as well, and do not use MASE alone to rank models.
+baseline scores as well, and do not use MASE alone to rank horizons.
 
 Two considerations apply to all metrics:
 
