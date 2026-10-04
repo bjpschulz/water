@@ -11,7 +11,8 @@ Main research questions:
 3. How strong is temporal autocorrelation?
 4. How can its effect be handled/exploited without temporal leakage?
 
-The final work is an academic report supported by reproducible code and experiments.
+The final work is an academic report (`main.tex`, see "Living documentation")
+supported by reproducible code and experiments.
 
 For where the project currently stands — which stage is done, which
 decisions are still open, what to do next — see **STATE.md**, not this
@@ -122,6 +123,20 @@ never delete or rewrite one except to correct an error.
   scale-free metric adds nothing over MAE (it would be MAE divided by a
   constant). Report MAE and RMSE; naive and seasonal-naive forecasts remain
   explicit baselines.
+- **LightGBM Huber and Poisson losses dropped** from Stage 3: loss-shape
+  variants that do not answer a research question (Huber's `alpha` is an
+  arbitrary scale parameter; Poisson is a count-data convenience on a
+  0.5 L-grid target). Stage 3 compares L2 vs. L1 only. They were run once
+  and then removed; the report states this in one line.
+- **Final feature set: `hour` + `lag_1`–`lag_15`** (the linear benchmark uses
+  the cyclic encoding of the hour with the same lags). Chosen from
+  `output/feature_ablation/summary.json` as the smallest set within a
+  negligible margin of the best on MAE and RMSE under both L2 and L1;
+  `dow`/`weekend`, the hour-scale lags (30/45/60) and the daily/weekly lags
+  (1440/10080) add nothing measurable on top. Judged against a practical
+  tolerance on one validation window, not a significance test. The feature
+  table keeps all columns (baselines and the ACF analysis use `lag_1`,
+  `lag_1440`, `lag_10080`); only the model inputs are restricted.
 
 ## Temporal autocorrelation
 
@@ -190,7 +205,7 @@ data. Save results reproducibly under `output/` (per Coding principles).
 Seasonal-naive convention (settled): fixed UTC-minute lags (`t-1440`,
 `t-10080`). They are explicit forecast baselines.
 
-### Stage 3 — Training-objective ablation (1-minute resolution)
+### Stage 3 — Diagnostic models and loss comparison (1-minute resolution)
 
 Coarsening the target (block aggregation) was considered and rejected: it
 changes the prediction problem rather than the model, so gains over the
@@ -199,12 +214,12 @@ resolution.
 
 Fit linear regression and one quick, untuned LightGBM on calendar features
 (hour, day-of-week, weekend, cyclical encodings) plus the full 1-minute lag
-set (`ts_utils.LAGS`: 1-15, 30, 45, 60, 1440, 10080), varying only the *training objective*;
-features, split, hyperparameters and seed stay identical:
+set (`ts_utils.LAGS`: 1-15, 30, 45, 60, 1440, 10080), varying only the *training loss*;
+features, split, hyperparameters and seed stay identical (a 2x2 of model class
+x loss):
 
 - Linear regression: OLS (L2) and median regression (L1, `QuantReg` q=0.5).
-- LightGBM: `regression` (L2), `regression_l1`, `huber` (LightGBM default
-  `alpha`), `poisson`.
+- LightGBM: `regression_l2` and `regression_l1`.
 
 The L2 fits are the plain diagnostic models. Purpose: test whether these
 features let a model clear the naive/seasonal-naive floor by a real margin,
@@ -212,30 +227,38 @@ and how the training loss changes that — not to produce a final tuned model.
 
 Every fit is scored on the Stage 2 validation split with MAE and RMSE
 plus the share of exactly-zero predictions, and compared against the Stage 2
-baselines. Objectives are never matched to a "preferred" metric in advance:
+baselines. Losses are never matched to a "preferred" metric in advance:
 all models are compared on all metrics, and trade-offs (e.g. L1 vs. RMSE)
-are reported as found. Implemented in `src/objective_ablation.py` ->
-`output/objective_ablation/summary.json` (+ one validation-prediction
+are reported as found. Implemented in `src/diagnostic_models.py` ->
+`output/diagnostic_models/summary.json` (+ one validation-prediction
 parquet with a column per model). The superseded horizon-ablation script and
 results are kept under `archive/horizon_ablation/`.
 
 ### Stage 4+ — Feature ablation and full modeling (1-minute resolution)
 
-Compare feature groups (lags in 1-minute units: immediate = `lag_1`–`lag_15`,
-hour-scale = `lag_30`, `lag_45`, `lag_60`, daily = `lag_1440`, weekly = `lag_10080`):
+Two sequential ablations (lags in 1-minute units: immediate =
+`lag_1`–`lag_15`, hour-scale = `lag_30`, `lag_45`, `lag_60`, daily = `lag_1440`,
+weekly = `lag_10080`):
 
-1. Calendar/time features only
-2. Lag-only: immediate, hour-scale, daily, and weekly consumption lags
-3. Calendar + immediate lags
-4. Calendar + all lags
-5. Calendar + sparse short lags (`lag_1`, `lag_5`, `lag_15`) in place of the
-   dense immediate block: tests whether the dense block adds anything
+1. Step 1, calendar ablation: every non-empty subset of (hour, dow_local,
+   weekend), fitted alone and on top of all lags (the calendar's marginal
+   value may differ once the target's history is present). `weekend` is a
+   deterministic function of `dow_local`; for trees it is expected to be
+   redundant, which this step checks.
+2. Step 2, lag ablation, with the calendar fixed to `hour` (the features
+   step 1 showed to be redundant are dropped): all lags; no seasonal lags (1–15,
+   30, 45, 60); immediate (1–15); sparse_hour (`lag_1`, `lag_15`, 30, 45, 60);
+   seasonal only (1440, 10080); persistence only (`lag_1`, comparable to the
+   persistence baseline); plus all lags without calendar as reference.
+   Calendar-then-lags is coordinate-wise, not a full grid.
 
 The dense immediate block is a hypothesis motivated by the measured ACF
 (highest at the shortest lags) and the few-minute event structure; the
-ablation tests it and may contradict it. Implemented in
-`src/feature_ablation.py` -> `output/feature_ablation/summary.json` (LightGBM only, L2
-and L1 objectives; same train rows and settings for every set).
+ablation tests it (immediate vs. sparse_hour) and may contradict it.
+Implemented in `src/feature_ablation.py` -> `output/feature_ablation/summary.json`
+(LightGBM only, L2 and L1 losses; same train rows and settings for every
+set). No variability estimate is computed: a set is judged against the best
+by a practical tolerance on the metric difference, on one validation window.
 
 This ablation directly tests how much predictive performance comes from
 temporal dependence, and whether calendar structure or the target's own
@@ -268,9 +291,7 @@ Two considerations apply to all metrics:
 
 ## Living documentation
 
-Two documents, two jobs — the academic report itself is a third, separate
-document that the user writes and maintains directly, outside this
-workflow.
+Two documents, two jobs — plus the academic report, a third document.
 
 - **AGENTS.md** (this file): rules, methodology, fixed protocol, and
   settled facts. Changes rarely, and mostly by *appending* to "Settled
@@ -281,9 +302,17 @@ workflow.
   open decision resolves, its one-line summary moves to AGENTS.md's
   settled list and gets deleted from STATE.md, so nothing stays
   duplicated in both places.
+- **`main.tex`**: the final academic report (single file, existing packages
+  only; do not add packages without need). It is the one place where
+  figures are restated by hand, each tagged with a `% source:` comment naming
+  the `output/` file it came from. Update it when a milestone is reached or a
+  result is produced, but **only after asking and checking in with the user
+  first** — propose the change, wait for confirmation, never edit it
+  unprompted. Keep it aligned with STATE.md/AGENTS.md (no dropped models,
+  stages or decisions left in it) and label hypotheses vs. measured results.
 - **`output/*/summary.json`** (and similar): the source of truth for
-  exact numeric values, produced by reproducible scripts. Neither file
-  above should restate figures — cite the JSON path instead. A number
+  exact numeric values, produced by reproducible scripts. Neither markdown
+  file above should restate figures — cite the JSON path instead. A number
   written in two places will eventually drift, and the drift is invisible
   until it causes a bad decision.
 

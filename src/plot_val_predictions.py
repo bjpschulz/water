@@ -19,7 +19,7 @@ from matplotlib.figure import Figure
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PREDICTIONS = REPO_ROOT / "output" / "baselines" / "validation_predictions.parquet"
-MODEL_PREDICTIONS = REPO_ROOT / "output" / "objective_ablation" / "validation_predictions.parquet"
+MODEL_PREDICTIONS = REPO_ROOT / "output" / "diagnostic_models" / "validation_predictions.parquet"
 FIG_DIR = REPO_ROOT / "output" / "validation_predictions" / "figs"
 
 LOCAL_TIMEZONE = "America/Vancouver"
@@ -29,8 +29,8 @@ DEFAULT_METHODS = [
     "persistence",
     "linear_l1",
     "linear_l2",
-    "lightgbm_regression_l1",
-    "lightgbm_regression",
+    "lightgbm_l1",
+    "lightgbm_l2",
 ]
 
 METHOD_LABELS = {
@@ -41,10 +41,8 @@ METHOD_LABELS = {
     "seasonal_naive_weekly": "Weekly seasonal naive",
     "linear_l2": "Linear regression (L2)",
     "linear_l1": "Linear regression (L1)",
-    "lightgbm_regression": "LightGBM (L2)",
-    "lightgbm_regression_l1": "LightGBM (L1)",
-    "lightgbm_huber": "LightGBM (Huber)",
-    "lightgbm_poisson": "LightGBM (Poisson)",
+    "lightgbm_l2": "LightGBM (L2)",
+    "lightgbm_l1": "LightGBM (L1)",
 }
 DAY_NAMES = dict(
     enumerate(("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"), start=1)

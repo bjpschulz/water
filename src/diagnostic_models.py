@@ -1,19 +1,18 @@
 """
-Stage 3 training-objective ablation (1-minute resolution).
+Stage 3 diagnostic models (1-minute resolution).
 
 Fits a linear regression and one untuned LightGBM on calendar + full lag-set
-features with different training losses -- features, split, and
-hyperparameters are identical, only the objective changes -- and evaluates
-every fit on the validation split with MAE and RMSE, plus the share of
-exactly-zero predictions. The L2 fits are the plain diagnostic models.
+features, each under an L2 and an L1 training loss -- features, split and
+hyperparameters are identical, only the loss changes -- and evaluates every fit
+on the validation split with MAE and RMSE, plus the share of exactly-zero
+predictions. The L2 fits are the plain diagnostic models.
 
 Linear: OLS (L2) vs. median regression (L1, statsmodels QuantReg q=0.5).
-LightGBM: regression (L2), regression_l1, huber (LightGBM default alpha),
-poisson. Every model is scored on every metric; no objective is paired with
-"its" metric in advance (AGENTS.md, Stage 3).
+LightGBM: regression_l2 vs. regression_l1. Every model is scored on every
+metric; no loss is paired with "its" metric in advance (AGENTS.md, Stage 3).
 
-Run: uv run python src/objective_ablation.py
-Output: output/objective_ablation/summary.json (metrics) and
+Run: uv run python src/diagnostic_models.py
+Output: output/diagnostic_models/summary.json (metrics) and
 validation_predictions.parquet (one column per fitted model)
 """
 
@@ -30,7 +29,7 @@ from splits import load_features, split_series
 from ts_utils import LAGS, write_summary
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = REPO_ROOT / "output" / "objective_ablation"
+OUT_DIR = REPO_ROOT / "output" / "diagnostic_models"
 OUT_JSON = OUT_DIR / "summary.json"
 OUT_PREDICTIONS = OUT_DIR / "validation_predictions.parquet"
 
@@ -49,7 +48,11 @@ LGBM_PARAMS = {
     "random_state": 42,
     "verbosity": -1,
 }
-LGBM_OBJECTIVES = ["regression", "regression_l1", "huber", "poisson"]
+# Model-name suffix -> LightGBM objective.
+LGBM_OBJECTIVES = {
+    "l2": "regression_l2",
+    "l1": "regression_l1",
+}
 
 
 def _xy(frame: pd.DataFrame, features: list[str]) -> tuple[np.ndarray, np.ndarray]:
@@ -84,7 +87,7 @@ def score(y_true, y_pred) -> dict:
 
 
 def run(splits: dict[str, pd.DataFrame]) -> tuple[dict, pd.DataFrame]:
-    """Fit every (model, objective) pair and score it on the validation split."""
+    """Fit every (model, loss) pair and score it on the validation split."""
     train, valid = splits["train"], splits["valid"]
     results, predictions = {}, {}
 
@@ -97,8 +100,8 @@ def run(splits: dict[str, pd.DataFrame]) -> tuple[dict, pd.DataFrame]:
 
     Xt_train, _ = _xy(train, FEATURES_TREE)
     Xt_valid, _ = _xy(valid, FEATURES_TREE)
-    for objective in LGBM_OBJECTIVES:
-        name = f"lightgbm_{objective}"
+    for suffix, objective in LGBM_OBJECTIVES.items():
+        name = f"lightgbm_{suffix}"
         predictions[name] = fit_lgbm(Xt_train, y_train, Xt_valid, objective)
         results[name] = {"objective": objective}
 

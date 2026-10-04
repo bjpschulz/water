@@ -12,6 +12,8 @@ wheels/
 # mac crap
 .DS_Store
 
+main.tex
+
 data/
 output/
 notebooks/

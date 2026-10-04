@@ -1,4 +1,4 @@
-"""Run the full pipeline in order: EDA -> features -> baselines -> objective ablation (Stage 3) -> feature ablation (Stage 4)."""
+"""Run the full pipeline in order: EDA -> features -> baselines -> diagnostic models (Stage 3) -> feature ablation (Stage 4)."""
 
 import subprocess
 import sys
@@ -9,7 +9,7 @@ STAGES = [
     "initial_eda.py",
     "build_features.py",
     "baselines.py",
-    "objective_ablation.py",
+    "diagnostic_models.py",
     "feature_ablation.py",
 ]
 
