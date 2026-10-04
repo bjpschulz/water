@@ -71,10 +71,14 @@ def fit_linear(X_train, y_train, X_valid, loss: str) -> np.ndarray:
         return sm.add_constant(X_valid, has_constant="add") @ fit.params
 
 
+def train_lgbm(X_train, y_train, objective: str) -> lgb.LGBMRegressor:
+    """Untuned LightGBM (LGBM_PARAMS) with the given objective, fitted."""
+    return lgb.LGBMRegressor(objective=objective, **LGBM_PARAMS).fit(X_train, y_train)
+
+
 def fit_lgbm(X_train, y_train, X_valid, objective: str) -> np.ndarray:
-    """Untuned LightGBM with the given objective."""
-    model = lgb.LGBMRegressor(objective=objective, **LGBM_PARAMS)
-    return model.fit(X_train, y_train).predict(X_valid)
+    """Untuned LightGBM with the given objective; returns validation predictions."""
+    return train_lgbm(X_train, y_train, objective).predict(X_valid)
 
 
 def score(y_true, y_pred) -> dict:

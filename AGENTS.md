@@ -11,7 +11,7 @@ Main research questions:
 3. How strong is temporal autocorrelation?
 4. How can its effect be handled/exploited without temporal leakage?
 
-The final work is an academic report (`main.tex`, see "Living documentation")
+The final work is an academic report (`tex/main.tex`, see "Living documentation")
 supported by reproducible code and experiments.
 
 For where the project currently stands — which stage is done, which
@@ -128,8 +128,16 @@ never delete or rewrite one except to correct an error.
   arbitrary scale parameter; Poisson is a count-data convenience on a
   0.5 L-grid target). Stage 3 compares L2 vs. L1 only. They were run once
   and then removed; the report states this in one line.
-- **Final feature set: `hour` + `lag_1`–`lag_15`** (the linear benchmark uses
-  the cyclic encoding of the hour with the same lags). Chosen from
+- **LightGBM hyperparameter tuning dropped.** A small grid (`num_leaves`,
+  `min_child_samples`, number of trees) on the final features changed
+  validation MAE/RMSE negligibly, with every optimum on the grid edge, and
+  does not bear on any research question. The final LightGBM keeps the
+  Stage 3 untuned settings (`diagnostic_models.LGBM_PARAMS`). Run once and
+  then removed; the report states this in one line. Both L2 and L1 losses
+  are kept for now.
+- **Final feature set: `hour` + `lag_1`–`lag_15`**, for every final-stage
+  model including the linear benchmark (raw `hour`, no cyclic encodings;
+  those were used only by the Stage 3 linear diagnostics). Chosen from
   `output/feature_ablation/summary.json` as the smallest set within a
   negligible margin of the best on MAE and RMSE under both L2 and L1;
   `dow`/`weekend`, the hour-scale lags (30/45/60) and the daily/weekly lags
@@ -272,8 +280,7 @@ Candidate models:
 Do not add models without justification. Interpretability and the
 temporal-autocorrelation question are more important than model count.
 
-Then: feature importance analysis, residual ACF check, light hyperparameter
-tuning on a small number of meaningful hyperparameters, and reproducible
+Then: feature importance analysis, residual ACF check, and reproducible
 documentation of all results.
 
 ## Evaluation principles
@@ -302,7 +309,7 @@ Two documents, two jobs — plus the academic report, a third document.
   open decision resolves, its one-line summary moves to AGENTS.md's
   settled list and gets deleted from STATE.md, so nothing stays
   duplicated in both places.
-- **`main.tex`**: the final academic report (single file, existing packages
+- **`tex/main.tex`**: the final academic report (single file, existing packages
   only; do not add packages without need). It is the one place where
   figures are restated by hand, each tagged with a `% source:` comment naming
   the `output/` file it came from. Update it when a milestone is reached or a

@@ -433,13 +433,7 @@ def make_figures(v100: pd.DataFrame, acf_result: dict, daily: pd.Series) -> None
 
 
 def main() -> None:
-    """
-    Orchestrate the full EDA: load -> validate raw data -> analyze the
-    meter transition -> restrict to the V100 period -> compute target
-    statistics, event structure, daily volumes and zero-flow runs,
-    temporal profiles (local time), ACF, and the timezone note -> write the
-    cleaned parquet (+ CSV twin), a JSON summary of all numeric results, and figures.
-    """
+    """ Orchestrate the full EDA """
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     PARQUET_PATH.parent.mkdir(parents=True, exist_ok=True)
 

@@ -15,9 +15,9 @@ deliberately does **not** contain:
 Rules, protocol, and anything that shouldn't change session-to-session
 live in AGENTS.md, not here.
 
-Last updated: feature ablation run in two steps (calendar, then lags with
-`hour` fixed) and the final feature set settled (`hour` + `lag_1`–`lag_15`);
-`main.tex` updated to match; Stage 3 interpretation (L1 vs. L2) still open.
+Last updated: LightGBM tuning dropped (see AGENTS.md); feature importance
+(grouped TreeSHAP) and residual ACF scripts run. `tex/main.tex` is up to date with importance and
+residual ACF; Stage 3 interpretation (L1 vs. L2) still open.
 
 ## Where we are
 
@@ -52,20 +52,22 @@ in `archive/horizon_ablation/`. The final test split remains untouched.
 
 ## Immediate next steps
 
-1. Interpret the Stage 3 results across all metrics (not just MAE) and decide
-   which loss(es) carry into the final model; record the conclusion in AGENTS.md.
-2. Final modelling (lean protocol): small LightGBM grid (few hyperparameters)
-   tuned train -> validation per loss; freeze features, loss(es) and
+1. Feature importance (`src/feature_importance.py`, done: LightGBM L2 and L1,
+   Stage 3 settings, fitted on train, scored on validation, full and final
+   feature set, grouped TreeSHAP only); interpreted in `tex/main.tex`, where it
+   agrees with the ablation.
+2. Residual ACF (`src/residual_acf.py`, done: validation, final feature set,
+   both losses, table + correlogram); interpreted in `tex/main.tex`.
+3. Decide whether L1 stays alongside L2 (both are kept for now; record the
+   conclusion in AGENTS.md).
+4. Final modelling (lean, no tuning): freeze features, losses and Stage 3
    hyperparameters; refit on train+valid (always-mean baseline on the same
    data); one test evaluation of the pre-declared models (final LightGBM,
-   linear benchmark, all baselines).
-3. On the final model: feature importance (grouped + single-feature
-   permutation importance, TreeSHAP via `predict(pred_contrib=True)`) and
-   residual ACF.
+   linear benchmark on the same features, all baselines).
 
 ## Report
 
-The final report is `main.tex` (single file). It was rewritten to the current
+The final report is `tex/main.tex` (single file). It was rewritten to the current
 status after Stage 3/4 were reworked; results in it are validation-split only.
 Update it at milestones or new results, but only after asking and checking in
 with the user (AGENTS.md → "Living documentation"). Open `\todo{}` items mark
@@ -79,7 +81,7 @@ known calendar features and earlier lags only.
 ## Active feature set
 
 Settled by the feature ablation (AGENTS.md): `hour` + `lag_1`–`lag_15`
-(cyclic hour encoding for the linear benchmark), taken from
+for all final-stage models, linear benchmark included (raw `hour`), taken from
 `output/build_features/whw_v100_with_features.parquet`, which keeps all
 columns (the Stage 3 diagnostic models still use the full set).
 
