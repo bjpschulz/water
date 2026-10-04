@@ -15,9 +15,9 @@ deliberately does **not** contain:
 Rules, protocol, and anything that shouldn't change session-to-session
 live in AGENTS.md, not here.
 
-Last updated: decided against the horizon ablation (coarsening the target
-is not an informative comparison); Stage 3 is now a training-objective
-ablation at 1-minute resolution (run; interpretation open).
+Last updated: lag set widened to a dense 1–15 block plus 30, 45, 60, 1440,
+10080 (feature table rebuilt, Stage 3 rerun, ACF figure marks all of them);
+Stage 3 interpretation open, feature ablation not started.
 
 ## Where we are
 
@@ -28,7 +28,7 @@ verification (emitted as the `timezone` block in summary.json), and a
 leakage-safe candidate feature set — all reproducible from
 `src/initial_eda.py` → `output/initial_eda/summary.json`.
 
-The feature table itself is now built: lags (1, 5, 15, 30, 60, 1440, 10080)
+The feature table itself is now built: lags (1–15, 30, 45, 60, 1440, 10080)
 plus calendar features in both raw and cyclic encodings (local
 time), warm-up NaN rows kept. Reproducible from `src/build_features.py`.
 
@@ -44,18 +44,24 @@ Exact scores and split metadata are in `output/baselines/summary.json`.
 Stage 3 (training-objective ablation) is run on the validation split: OLS
 vs. L1 linear regression and LightGBM with L2 / L1 / Huber / Poisson
 objectives; the L2 fits are the plain diagnostic models (LightGBM L2 sits
-slightly below always-zero MAE but above persistence). Results (all metrics,
+below always-zero MAE but above persistence). Results (all metrics,
 zero-prediction share) are in `output/objective_ablation/summary.json`;
 interpretation of the other objectives is still open. The earlier
 horizon-aggregation ablation was dropped; its script and results are archived
 in `archive/horizon_ablation/`. The final test split remains untouched.
+
+A model-free redundancy proxy (pairwise Spearman correlation of the model
+features, training split) is in `src/feature_correlation.py` →
+`output/feature_correlation/`. It is an input for interpreting the later
+feature-importance results.
 
 ## Immediate next steps
 
 1. Interpret the Stage 3 results across all metrics (not just MAE) and decide
    which objective(s) carry into Stage 4; record the conclusion in AGENTS.md.
 2. Stage 4: feature-group ablation at 1-minute resolution with the chosen
-   objective(s); then one evaluation on the test period, feature importance,
+   objective(s), groups as defined in AGENTS.md (incl. the sparse-vs-dense
+   short-lag comparison); then one evaluation on the test period, feature importance,
    residual ACF, light tuning.
 
 ## Modelling target
@@ -66,7 +72,7 @@ known calendar features and earlier lags only.
 ## Active feature set
 
 Calendar features (hour, day-of-week, weekend; cyclic encodings for linear
-regression, raw for LightGBM) and lags 1, 5, 15, 30, 60, 1440, 10080 from
+regression, raw for LightGBM) and lags 1–15, 30, 45, 60, 1440, 10080 from
 `output/build_features/whw_v100_with_features.parquet`. Still subject to the Stage 4
 feature-group ablation.
 

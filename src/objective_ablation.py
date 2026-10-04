@@ -27,7 +27,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from splits import load_features, split_series
-from ts_utils import write_summary
+from ts_utils import LAGS, write_summary
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO_ROOT / "output" / "objective_ablation"
@@ -36,8 +36,8 @@ OUT_PREDICTIONS = OUT_DIR / "validation_predictions.parquet"
 
 TARGET = "avg_rate"
 
-# Full 1-minute lag set from AGENTS.md / build_features.py.
-LAG_COLS = ["lag_1", "lag_5", "lag_15", "lag_30", "lag_60", "lag_1440", "lag_10080"]
+# Full 1-minute lag set (ts_utils.LAGS), as built in build_features.py.
+LAG_COLS = [f"lag_{k}" for k in LAGS]
 FEATURES_LINEAR = ["hour_sin", "hour_cos", "dow_sin", "dow_cos", "weekend"] + LAG_COLS
 FEATURES_TREE = ["hour", "dow_local", "weekend"] + LAG_COLS
 

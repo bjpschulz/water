@@ -118,11 +118,6 @@ never delete or rewrite one except to correct an error.
 - **Rolling-window statistics excluded** from the candidate feature set —
   largely redundant with the lags they'd average over. Revisit only with
   a specific methodological justification, per Research Constraints above.
-- **Stage 3 diagnostic finding (L2 objective):** LightGBM's validation MAE is slightly
-  below always-zero but above persistence. Zero is the MAE-optimal constant
-  prediction when the median is zero; this does not make it optimal among
-  feature-conditioned rules. Results: `output/objective_ablation/summary.json`
-  (`lightgbm_regression`).
 - **No MASE:** single series at a single fixed resolution, so a
   scale-free metric adds nothing over MAE (it would be MAE divided by a
   constant). Report MAE and RMSE; naive and seasonal-naive forecasts remain
@@ -140,7 +135,8 @@ resolution for RQ1.
 
 Candidate lags (1-minute resolution):
 
-- 1, 5, 15, 30, 60 minutes (short-run)
+- 1 through 15 minutes (immediate, every lag)
+- 30, 45, 60 minutes (hour-scale)
 - 1440 minutes = 1 day
 - 10080 minutes = 1 week
 
@@ -203,7 +199,7 @@ resolution.
 
 Fit linear regression and one quick, untuned LightGBM on calendar features
 (hour, day-of-week, weekend, cyclical encodings) plus the full 1-minute lag
-set (1, 5, 15, 30, 60, 1440, 10080), varying only the *training objective*;
+set (`ts_utils.LAGS`: 1-15, 30, 45, 60, 1440, 10080), varying only the *training objective*;
 features, split, hyperparameters and seed stay identical:
 
 - Linear regression: OLS (L2) and median regression (L1, `QuantReg` q=0.5).
@@ -225,12 +221,19 @@ results are kept under `archive/horizon_ablation/`.
 
 ### Stage 4+ — Feature ablation and full modeling (1-minute resolution)
 
-Compare feature groups (lags in 1-minute units: recent = `lag_1`, daily = `lag_1440`, weekly = `lag_10080`):
+Compare feature groups (lags in 1-minute units: immediate = `lag_1`–`lag_15`,
+hour-scale = `lag_30`, `lag_45`, `lag_60`, daily = `lag_1440`, weekly = `lag_10080`):
 
 1. Calendar/time features only
-2. Lag-only: recent, daily, and weekly consumption lags
-3. Calendar + recent lag (`lag_1`)
-4. Calendar + recent, daily, and weekly lags
+2. Lag-only: immediate, hour-scale, daily, and weekly consumption lags
+3. Calendar + immediate lags
+4. Calendar + all lags
+5. Calendar + sparse short lags (`lag_1`, `lag_5`, `lag_15`) in place of the
+   dense immediate block: tests whether the dense block adds anything
+
+The dense immediate block is a hypothesis motivated by the measured ACF
+(highest at the shortest lags) and the few-minute event structure; the
+ablation tests it and may contradict it.
 
 This ablation directly tests how much predictive performance comes from
 temporal dependence, and whether calendar structure or the target's own

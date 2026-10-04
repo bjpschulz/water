@@ -7,7 +7,7 @@ building the table on the full series *before* splitting is leakage-safe.
 
 Feature groups (justifications measured in output/initial_eda/summary.json):
 
-  lags       lag_1, lag_5, lag_15, lag_30, lag_60, lag_1440, lag_10080
+  lags       lag_1 .. lag_15, lag_30, lag_45, lag_60, lag_1440, lag_10080
              The occurrence lag (occ_lag_1) is NOT built yet.
   calendar   hour, hour_sin, hour_cos, dow_local, dow_sin, dow_cos, weekend
              Raw integers and cyclic encodings are both stored; since different
@@ -31,7 +31,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ts_utils import to_serializable
+from ts_utils import LAGS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IN_PARQUET = REPO_ROOT / "output" / "initial_eda" / "whw_v100.parquet"
@@ -39,8 +39,6 @@ OUT_DIR = REPO_ROOT / "output" / "build_features"
 OUT_PARQUET = OUT_DIR / "whw_v100_with_features.parquet"
 OUT_CSV = OUT_DIR / "whw_v100_with_features.csv"  # twin, for quick skimming
 
-# Lag set from AGENTS.md ("Temporal autocorrelation" / Stage 3), in minutes.
-LAGS = [1, 5, 15, 30, 60, 1440, 10080]
 MAX_LAG = max(LAGS)
 
 #%%

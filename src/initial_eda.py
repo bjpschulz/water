@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.stattools import acf
 
-from ts_utils import distribution_summary, segment_runs, to_serializable
+from ts_utils import LAGS, distribution_summary, segment_runs, to_serializable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = REPO_ROOT / "data" / "Water_WHW.csv"
@@ -44,10 +44,7 @@ V100_CLEAN_UNIX_TS = 1_342_310_580
 
 LOCAL_TZ = "America/Vancouver"
 
-# Candidate lags for THIS (1-minute-resolution) analysis only. Chosen to
-# span short-run persistence (1-30 min) up to daily/weekly cycles.
-CANDIDATE_LAGS = [1, 5, 15, 30, 60, 1440, 10080]
-ACF_MAX_LAG = 10080  # one week, in minutes
+ACF_MAX_LAG = max(LAGS)
 SECONDS_PER_MINUTE = 60
 PULSE_SIZE_L = 0.5  # V100 meter pulse size, in liters
 
@@ -309,7 +306,7 @@ def acf_analysis(v100: pd.DataFrame) -> dict:
 
     def at_lags(a):
         out = {}
-        for lag in CANDIDATE_LAGS:
+        for lag in LAGS:
             out[str(lag)] = float(a[lag]) if lag <= ACF_MAX_LAG else None
         return out
 
@@ -411,22 +408,23 @@ def make_figures(v100: pd.DataFrame, acf_result: dict, daily: pd.Series) -> None
     fig.savefig(FIG_DIR / "dow_profile.png", dpi=150)
     plt.close(fig)
 
-    # Two panels (full range, 6-hour zoom)
+    # Two panels (full range, 5-hour zoom)
     lags = np.arange(ACF_MAX_LAG + 1)
     curve = np.asarray(acf_result["curve"])
-    zoom = 360
+    zoom = 300
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     axes[0].plot(lags, curve, linewidth=0.8)
     axes[0].set_ylabel("ACF of avg_rate")
     axes[1].plot(lags[: zoom + 1], curve[: zoom + 1], linewidth=0.8)
     axes[1].set_ylabel("ACF of avg_rate")
-    axes[1].set_title("Zoom: first 6 hours")
+    axes[1].set_title("Zoom: first 5 hours")
     for ax, x_max in zip(axes, [ACF_MAX_LAG, zoom]):
         ax.axhline(0, color="black", linewidth=0.5)
         ax.set_xlabel("Lag (minutes)")
-        for lag in CANDIDATE_LAGS:
+        for lag in LAGS:
             if lag <= x_max:  # only mark lags inside this panel's range
                 ax.axvline(lag, color="red", linestyle=":", alpha=0.4)
+    axes[1].xaxis.set_major_locator(MultipleLocator(60))  # one tick per hour
     axes[1].set_xlim(0, zoom)  # axvline would otherwise stretch the zoom to the full lag range
     fig.suptitle("Autocorrelation (V100 period); red lines: candidate lags")
     fig.tight_layout()
