@@ -233,7 +233,9 @@ hour-scale = `lag_30`, `lag_45`, `lag_60`, daily = `lag_1440`, weekly = `lag_100
 
 The dense immediate block is a hypothesis motivated by the measured ACF
 (highest at the shortest lags) and the few-minute event structure; the
-ablation tests it and may contradict it.
+ablation tests it and may contradict it. Implemented in
+`src/feature_ablation.py` -> `output/feature_ablation/summary.json` (LightGBM only, L2
+and L1 objectives; same train rows and settings for every set).
 
 This ablation directly tests how much predictive performance comes from
 temporal dependence, and whether calendar structure or the target's own

@@ -17,7 +17,8 @@ live in AGENTS.md, not here.
 
 Last updated: lag set widened to a dense 1–15 block plus 30, 45, 60, 1440,
 10080 (feature table rebuilt, Stage 3 rerun, ACF figure marks all of them);
-Stage 3 interpretation open, feature ablation not started.
+Stage 3 interpretation open; feature-group ablation implemented and run
+(`src/feature_ablation.py`), interpretation open.
 
 ## Where we are
 

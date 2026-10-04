@@ -17,6 +17,8 @@ them by their role in the workflow:
 | `src/splits.py` | Shared chronological train/validation/test split. |
 | `src/baselines.py` | Evaluate the Stage 2 naive baselines. |
 | `src/objective_ablation.py` | Compare training objectives (L2/L1/Huber/Poisson) for Stage 3 (incl. the plain L2 diagnostic models). |
+| `src/feature_ablation.py` | Compare feature groups (calendar, immediate/hour-scale/daily/weekly lags) for Stage 4. |
+| `src/feature_correlation.py` | Spearman correlation heatmap of the model features (training split). |
 | `src/plot_val_predictions.py` | Plot validation actuals against saved Stage 2/3 predictions. |
 | `src/ts_utils.py` | Shared time-series and serialization helpers. |
 
@@ -35,6 +37,7 @@ uv run python src/initial_eda.py
 uv run python src/build_features.py
 uv run python src/baselines.py
 uv run python src/objective_ablation.py
+uv run python src/feature_ablation.py
 uv run python src/plot_val_predictions.py
 ```
 

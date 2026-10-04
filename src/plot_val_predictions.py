@@ -1,6 +1,6 @@
 """Plot actual vs. predicted water consumption for one validation window.
 
-Usage: python src/plot_val_predictions.py --week 2 --day 2 --hours 16-22 --methods persistence linear_l2
+Usage: uv run src/plot_val_predictions.py --week 2 --day 2 --hours 16-22 --methods persistence linear_l2
 """
 
 import argparse

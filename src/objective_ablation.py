@@ -63,8 +63,9 @@ def fit_linear(X_train, y_train, X_valid, loss: str) -> np.ndarray:
     """OLS (loss 'l2') or median regression (loss 'l1'); returns validation predictions."""
     if loss == "l2":
         return LinearRegression().fit(X_train, y_train).predict(X_valid)
-    fit = sm.QuantReg(y_train, sm.add_constant(X_train)).fit(q=0.5, max_iter=5000)
-    return sm.add_constant(X_valid, has_constant="add") @ fit.params
+    elif loss == "l1":
+        fit = sm.QuantReg(y_train, sm.add_constant(X_train)).fit(q=0.5, max_iter=5000)
+        return sm.add_constant(X_valid, has_constant="add") @ fit.params
 
 
 def fit_lgbm(X_train, y_train, X_valid, objective: str) -> np.ndarray:
