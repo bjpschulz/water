@@ -133,8 +133,16 @@ never delete or rewrite one except to correct an error.
   validation MAE/RMSE negligibly, with every optimum on the grid edge, and
   does not bear on any research question. The final LightGBM keeps the
   Stage 3 untuned settings (`diagnostic_models.LGBM_PARAMS`). Run once and
-  then removed; the report states this in one line. Both L2 and L1 losses
-  are kept for now.
+  then removed; the report states this in one line.
+- **Both L2 and L1 losses are kept** through the final stage (importance,
+  residual ACF, test evaluation). The L1/L2 trade-off is reported as found,
+  with neither declared the primary model.
+- **Test evaluation protocol:** LightGBM and the linear benchmark (each L2
+  and L1) are fitted on train + valid (same Stage 3 settings, no tuning) and
+  scored once on the test split next to all baselines, the always-mean one
+  using the train + valid mean (`src/test_evaluation.py` ->
+  `output/test_evaluation/summary.json`). The test split has now been
+  evaluated; no further modelling decision may be based on it.
 - **Final feature set: `hour` + `lag_1`–`lag_15`**, for every final-stage
   model including the linear benchmark (raw `hour`, no cyclic encodings;
   those were used only by the Stage 3 linear diagnostics). Chosen from

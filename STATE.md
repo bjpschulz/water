@@ -15,9 +15,9 @@ deliberately does **not** contain:
 Rules, protocol, and anything that shouldn't change session-to-session
 live in AGENTS.md, not here.
 
-Last updated: LightGBM tuning dropped (see AGENTS.md); feature importance
+Last updated: single test evaluation run; LightGBM tuning dropped (see AGENTS.md); feature importance
 (grouped TreeSHAP) and residual ACF scripts run. `tex/main.tex` is up to date with importance and
-residual ACF; Stage 3 interpretation (L1 vs. L2) still open.
+residual ACF; L1 and L2 are both kept (AGENTS.md).
 
 ## Where we are
 
@@ -45,10 +45,9 @@ Stage 3 (diagnostic models, `src/diagnostic_models.py`) is run on the
 validation split: linear regression and LightGBM, each under L2 and L1 (the
 Huber/Poisson variants were dropped, see AGENTS.md). The L2 fits are the plain
 diagnostic models. Results (all metrics, zero-prediction share) are in
-`output/diagnostic_models/summary.json`; interpretation of the L1-vs-L2
-trade-off is still open. The earlier
+`output/diagnostic_models/summary.json`; both losses are kept (AGENTS.md). The earlier
 horizon-aggregation ablation was dropped; its script and results are archived
-in `archive/horizon_ablation/`. The final test split remains untouched.
+in `archive/horizon_ablation/`. The test split has been evaluated once (Stage 6); it is spent.
 
 ## Immediate next steps
 
@@ -58,17 +57,17 @@ in `archive/horizon_ablation/`. The final test split remains untouched.
    agrees with the ablation.
 2. Residual ACF (`src/residual_acf.py`, done: validation, final feature set,
    both losses, table + correlogram); interpreted in `tex/main.tex`.
-3. Decide whether L1 stays alongside L2 (both are kept for now; record the
-   conclusion in AGENTS.md).
-4. Final modelling (lean, no tuning): freeze features, losses and Stage 3
-   hyperparameters; refit on train+valid (always-mean baseline on the same
-   data); one test evaluation of the pre-declared models (final LightGBM,
-   linear benchmark on the same features, all baselines).
+3. Final test evaluation (`src/test_evaluation.py`, done once: LightGBM and
+   linear benchmark, each L2 and L1, fitted on train+valid on the final
+   features; all baselines; results in `output/test_evaluation/summary.json`).
+   Written up in `tex/main.tex`.
+4. Remaining: the discussion chapter, the literature, and the open `\todo`s in
+   `tex/main.tex`.
 
 ## Report
 
 The final report is `tex/main.tex` (single file). It was rewritten to the current
-status after Stage 3/4 were reworked; results in it are validation-split only.
+status through the test evaluation (Stage 6).
 Update it at milestones or new results, but only after asking and checking in
 with the user (AGENTS.md → "Living documentation"). Open `\todo{}` items mark
 what is still unwritten.
