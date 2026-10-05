@@ -1,67 +1,63 @@
 """
-Stage 6 single test evaluation (1-minute resolution).
+Stage 6: single test evaluation.
 
-The pre-declared models -- LightGBM and the linear benchmark, each under an L2
-and an L1 loss, on the final feature set (`hour` + `lag_1`-`lag_15`, raw hour)
--- are fitted on train + valid with the Stage 3 settings, frozen before this
-script was written, and scored once on the test split with MAE, RMSE and the
-share of exactly-zero predictions, next to the five naive baselines. The
-always-mean baseline uses the train + valid mean, i.e. the same data as the
-models. Nothing here is tuned or selected on the test split.
+The pre-declared final models -- LightGBM and the linear benchmark, each under
+an L2 and an L1 loss, on the final feature set (`hour` + `lag_1`-`lag_15`, raw
+hour) -- are fitted on train + valid with the Stage 3 settings and scored once
+on the test split, next to the five naive baselines. The always-mean baseline
+uses the train + valid mean, i.e. the same data as the models. Nothing here is
+tuned or selected on the test split.
 
 Run: uv run python src/test_evaluation.py
-Output: output/test_evaluation/summary.json
+Output: output/test_evaluation/summary.json and test_predictions.parquet
 """
-
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from baselines import LAG_COLUMNS
-from diagnostic_models import LGBM_OBJECTIVES, TARGET, _xy, fit_linear, score, train_lgbm
-from feature_importance import FEATURE_SETS
-from splits import load_features, split_series
-from ts_utils import write_summary
+from core.config import FINAL_FEATURES, LOSSES, OUTPUT_DIR
+from core.data import load_features, split_series, xy
+from core.evaluation import score, write_summary
+from core.models import fit_lgbm, fit_linear
+from core.naive import naive_forecasts
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_JSON = REPO_ROOT / "output" / "test_evaluation" / "summary.json"
-
-FINAL_COLUMNS = FEATURE_SETS["final"][0]
+OUT_DIR = OUTPUT_DIR / "test_evaluation"
 
 
 def main() -> None:
-    """Fit on train + valid, score every model and baseline once on test, save the summary."""
+    """Fit on train + valid, score every model and baseline once on test, save summary and predictions."""
     splits = split_series(load_features())
     fit_frame = pd.concat([splits["train"], splits["valid"]])  # contiguous, chronological
     test = splits["test"]
-    X_fit, y_fit = _xy(fit_frame, FINAL_COLUMNS)
-    X_test, y_test = _xy(test, FINAL_COLUMNS)
+    X_fit, y_fit = xy(fit_frame, FINAL_FEATURES)
+    X_test, y_test = xy(test, FINAL_FEATURES)
     fit_mean = float(y_fit.mean())
 
-    predictions = {
-        "always_zero": ("baseline", np.zeros(len(test))),
-        "always_mean": ("baseline", np.full(len(test), fit_mean)),
-        **{name: ("baseline", test[col].to_numpy(dtype=np.float64)) for name, (col, _) in LAG_COLUMNS.items()},
-    }
-    for loss in ("l2", "l1"):
-        predictions[f"linear_{loss}"] = ("model", fit_linear(X_fit, y_fit, X_test, loss))
-    for suffix, objective in LGBM_OBJECTIVES.items():
-        predictions[f"lightgbm_{suffix}"] = ("model", train_lgbm(X_fit, y_fit, objective).predict(X_test))
+    kinds, preds = {}, {}
+    for name, p in naive_forecasts(test, fit_mean).items():
+        kinds[name], preds[name] = "baseline", p
+    for model, fit in (("linear", fit_linear), ("lightgbm", fit_lgbm)):
+        for loss in LOSSES:
+            name = f"{model}_{loss}"
+            kinds[name], preds[name] = "model", fit(X_fit, y_fit, X_test, loss)
 
     summary = {
         "split": "test",
-        "features": FINAL_COLUMNS,
+        "features": FINAL_FEATURES,
         "fit_rows": len(fit_frame),
         "n": len(test),
         "fit_target_mean": fit_mean,
-        "results": {name: {"kind": kind, **score(y_test, y_pred)} for name, (kind, y_pred) in predictions.items()},
+        "test_target_zero_share": float(np.mean(y_test == 0)),
+        "results": {name: {"kind": kinds[name], **score(y_test, p)} for name, p in preds.items()},
     }
-    write_summary(OUT_JSON, summary)
+    write_summary(OUT_DIR / "summary.json", summary)
+    pd.DataFrame({"unix_ts": test.index.to_numpy(), "actual": y_test, **preds}).to_parquet(
+        OUT_DIR / "test_predictions.parquet", index=False
+    )
+
     print(f"{'predictor':24s} {'kind':9s} {'MAE':>8s} {'RMSE':>8s} {'zero_pred':>10s}")
     for name, r in summary["results"].items():
         print(f"{name:24s} {r['kind']:9s} {r['mae']:8.4f} {r['rmse']:8.4f} {r['zero_prediction_share']:10.3f}")
-    print(f"\nn={summary['n']} fit_rows={summary['fit_rows']}\nSaved {OUT_JSON.relative_to(REPO_ROOT)}")
 
 
 if __name__ == "__main__":

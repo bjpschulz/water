@@ -1,12 +1,17 @@
-"""Plot actual vs. predicted water consumption for one validation window.
+"""
+Plot actual vs. predicted water consumption for one window of the validation or test split.
 
-Usage: uv run src/plot_val_predictions.py --week 2 --day 2 --hours 16-22 --methods persistence linear_l2
+Reads saved predictions, no refitting: validation = Stage 2 baselines + Stage 3
+models (all features, fitted on train); test = Stage 6 baselines + final models
+(hour + lags 1-15, fitted on train + valid).
+
+Usage: uv run python src/plot_predictions.py --split test --week 2 --day 2 --hours 16-22
+Output: output/prediction_plots/<split>_week_..pdf
 """
 
 import argparse
 from dataclasses import dataclass
 from math import ceil
-from pathlib import Path
 
 import matplotlib
 
@@ -17,13 +22,21 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.figure import Figure
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-BASELINE_PREDICTIONS = REPO_ROOT / "output" / "baselines" / "validation_predictions.parquet"
-MODEL_PREDICTIONS = REPO_ROOT / "output" / "diagnostic_models" / "validation_predictions.parquet"
-FIG_DIR = REPO_ROOT / "output" / "validation_predictions" / "figs"
+from core.config import LOCAL_TZ, OUTPUT_DIR
 
-LOCAL_TIMEZONE = "America/Vancouver"
-N_VALIDATION_WEEKS = 13
+# Split -> prediction files (joined on unix_ts) and the description used in plot titles.
+SOURCES = {
+    "valid": (
+        [OUTPUT_DIR / "baselines" / "validation_predictions.parquet",
+         OUTPUT_DIR / "compare_models" / "validation_predictions.parquet"],
+        "validation, Stage 3 models",
+    ),
+    "test": (
+        [OUTPUT_DIR / "test_evaluation" / "test_predictions.parquet"],
+        "test, final models",
+    ),
+}
+FIG_DIR = OUTPUT_DIR / "prediction_plots"
 DEFAULT_METHODS = [
     "always_zero",
     "persistence",
@@ -35,7 +48,7 @@ DEFAULT_METHODS = [
 
 METHOD_LABELS = {
     "always_zero": "Always zero",
-    "always_mean": "Training mean",
+    "always_mean": "Always mean",
     "persistence": "Persistence (1 minute)",
     "seasonal_naive_daily": "Daily seasonal naive",
     "seasonal_naive_weekly": "Weekly seasonal naive",
@@ -51,10 +64,10 @@ DAY_NAMES = dict(
 
 @dataclass(frozen=True)
 class Window:
-    """Local-calendar slice of the validation period.
+    """Local-calendar slice of a split.
 
-    `week` counts from the start of validation (1-13); `day` is 1 (Monday) to 7 (Sunday)
-    or None for the whole week; `hours` is a local [start, end) hour range or None.
+    `week` counts from the split's first Monday (1 = first week); `day` is 1 (Monday)
+    to 7 (Sunday) or None for the whole week; `hours` is a local [start, end) hour range or None.
     """
 
     week: int
@@ -62,8 +75,8 @@ class Window:
     hours: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
-        if not 1 <= self.week <= N_VALIDATION_WEEKS:
-            raise ValueError(f"week must be between 1 and {N_VALIDATION_WEEKS}")
+        if self.week < 1:
+            raise ValueError("week must be >= 1")
         if self.day is not None and self.day not in DAY_NAMES:
             raise ValueError("day must be None or an integer from 1 (Monday) to 7 (Sunday)")
         if self.hours is not None and not 0 <= self.hours[0] < self.hours[1] <= 24:
@@ -80,7 +93,7 @@ class Window:
         return mask
 
     def title(self) -> str:
-        text = f"validation week {self.week}"
+        text = f"week {self.week}"
         if self.day is not None:
             text += f", {DAY_NAMES[self.day]}"
         if self.hours is not None:
@@ -96,25 +109,20 @@ class Window:
         return text
 
 
-def load_validation_predictions() -> pd.DataFrame:
-    """Load baseline and model predictions, aligned, with a tz-aware `local_time` column."""
-    baselines = pd.read_parquet(BASELINE_PREDICTIONS)
-    models = pd.read_parquet(MODEL_PREDICTIONS)
-    if not baselines["unix_ts"].equals(models["unix_ts"]):
-        raise ValueError("Baseline and model prediction artifacts use different timestamps")
-    predictions = pd.concat(
-        [
-            baselines.reset_index(drop=True),
-            models.drop(columns=["unix_ts", "actual"]).reset_index(drop=True),
-        ],
-        axis=1,
-    )
+def load_predictions(split: str) -> pd.DataFrame:
+    """Load the saved predictions of a split, aligned, with a tz-aware `local_time` column."""
+    frames = [pd.read_parquet(path) for path in SOURCES[split][0]]
+    predictions = frames[0]
+    for frame in frames[1:]:
+        if not frame["unix_ts"].equals(predictions["unix_ts"]):
+            raise ValueError("Prediction artifacts use different timestamps")
+        predictions = pd.concat([predictions, frame.drop(columns=["unix_ts", "actual"])], axis=1)
     utc = pd.to_datetime(predictions["unix_ts"], unit="s", utc=True)
-    predictions["local_time"] = utc.dt.tz_convert(LOCAL_TIMEZONE)
+    predictions["local_time"] = utc.dt.tz_convert(LOCAL_TZ)
     return predictions
 
 
-def plot_predictions(predictions: pd.DataFrame, window: Window, methods: list[str]) -> Figure:
+def plot_predictions(predictions: pd.DataFrame, window: Window, methods: list[str], split: str) -> Figure:
     """Small multiples (two columns) of actual vs. predicted values inside `window`."""
     unknown = set(methods) - (set(predictions.columns) & set(METHOD_LABELS))
     if unknown:
@@ -124,15 +132,15 @@ def plot_predictions(predictions: pd.DataFrame, window: Window, methods: list[st
 
     data = predictions.loc[window.mask(predictions["local_time"])]
     if data.empty:
-        raise ValueError("The requested window has no validation observations")
+        raise ValueError("The requested window has no observations")
 
     ncols = 2
     nrows = ceil(len(methods) / ncols)
     fig, axes = plt.subplots(
         nrows, ncols, figsize=(15, 3.2 * nrows), sharex=True, sharey=True, squeeze=False
     )
-    locator = mdates.AutoDateLocator(minticks=4, maxticks=9, tz=LOCAL_TIMEZONE)
-    formatter = mdates.DateFormatter("%a %d %H:%M %Z", tz=LOCAL_TIMEZONE)
+    locator = mdates.AutoDateLocator(minticks=4, maxticks=9, tz=LOCAL_TZ)
+    formatter = mdates.DateFormatter("%a %d %H:%M %Z", tz=LOCAL_TZ)
 
     for ax, method in zip(axes.flat, methods):
         ax.plot(data["local_time"], data["actual"], color="tab:blue", linewidth=0.8, label="Actual")
@@ -148,9 +156,9 @@ def plot_predictions(predictions: pd.DataFrame, window: Window, methods: list[st
         ax.set_visible(False)
     for ax in axes[-1, :]:
         if ax.get_visible():
-            ax.set_xlabel(f"Local time ({LOCAL_TIMEZONE})")
+            ax.set_xlabel(f"Local time ({LOCAL_TZ})")
     fig.autofmt_xdate(rotation=25, ha="right")
-    fig.suptitle(f"Actual and predicted water consumption — {window.title()}")
+    fig.suptitle(f"Actual and predicted water consumption — {SOURCES[split][1]}, {window.title()}")
     fig.tight_layout()
     return fig
 
@@ -163,19 +171,20 @@ def parse_hours(text: str) -> tuple[int, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--week", type=int, default=2, help="validation week, 1-13")
+    parser.add_argument("--split", choices=list(SOURCES), default="valid", help="which saved predictions to plot")
+    parser.add_argument("--week", type=int, default=2, help="week of the split, from 1")
     parser.add_argument("--day", type=int, help="1 (Monday) to 7 (Sunday); default whole week")
     parser.add_argument("--hours", type=parse_hours, help="local hour range START-END, e.g. 16-22")
     parser.add_argument("--methods", nargs="+", default=DEFAULT_METHODS, help="prediction columns")
     args = parser.parse_args()
 
     window = Window(args.week, args.day, args.hours)
-    fig = plot_predictions(load_validation_predictions(), window, args.methods)
+    fig = plot_predictions(load_predictions(args.split), window, args.methods, args.split)
     FIG_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = FIG_DIR / f"{window.slug()}.pdf"
+    output_path = FIG_DIR / f"{args.split}_{window.slug()}.pdf"
     fig.savefig(output_path, dpi=300, bbox_inches="tight", format="pdf")
     plt.close(fig)
-    print(f"Validation prediction plot saved to {output_path.relative_to(REPO_ROOT)}")
+    print(f"Saved {output_path}")
 
 
 if __name__ == "__main__":

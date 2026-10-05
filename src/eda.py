@@ -1,39 +1,36 @@
 """
-Reproducible EDA for the AMPds2 whole-house water (WHW) data, at native
-1-minute resolution.
+Reproducible EDA and cleaning of the AMPds2 whole-house water (WHW) data, at
+native 1-minute resolution: integrity checks, the meter transition, target
+distribution, water-use events, local-time profiles and the autocorrelation.
 
-Run: uv run python src/initial_eda.py
+Run: uv run python src/eda.py
 
 Outputs:
-  output/initial_eda/whw_v100.parquet cleaned analysis period (1-min grid;
-                                    index unix_ts, columns datetime_local,
-                                    counter, avg_rate)
-  output/initial_eda/whw_v100.csv     identical content as CSV, for inspection
-  output/initial_eda/summary.json      all key numbers
-  output/initial_eda/figs/*.png        figures
+  output/eda/whw_v100.parquet  cleaned analysis period (1-min grid; index
+                               unix_ts, columns datetime_local, counter, avg_rate)
+  output/eda/whw_v100.csv      identical content as CSV, for inspection
+  output/eda/summary.json      all key numbers
+  output/eda/figs/*.png        figures
 """
 
-#%%
 import json
-from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")  # headless
 
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MultipleLocator
 import numpy as np
 import pandas as pd
+from matplotlib.ticker import MultipleLocator
 from statsmodels.tsa.stattools import acf
 
-from ts_utils import LAGS, distribution_summary, segment_runs, to_serializable
+from core.config import LAGS, LOCAL_TZ, RAW_CSV, REPO_ROOT, V100_PARQUET
+from core.evaluation import to_serializable, write_summary
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DATA_PATH = REPO_ROOT / "data" / "Water_WHW.csv"
-OUT_DIR = REPO_ROOT / "output" / "initial_eda"
-PARQUET_PATH = OUT_DIR / "whw_v100.parquet"
-CSV_PATH = OUT_DIR / "whw_v100.csv"  # twin of the parquet, for eyeballing
+OUT_DIR = V100_PARQUET.parent
+PARQUET_PATH = V100_PARQUET
+CSV_PATH = V100_PARQUET.with_suffix(".csv")  # twin of the parquet, for eyeballing
 FIG_DIR = OUT_DIR / "figs"
 
 V100_UNIX_TS = 1_342_287_780  # 2012-07-14: documented switch to the V100 water meter
@@ -42,17 +39,39 @@ V100_UNIX_TS = 1_342_287_780  # 2012-07-14: documented switch to the V100 water 
 # (after the swap the counter shows one single sub-pulse increment < 0.5 L, at unix_ts 1342310520, avg_rate 0.053)
 V100_CLEAN_UNIX_TS = 1_342_310_580
 
-LOCAL_TZ = "America/Vancouver"
-
 ACF_MAX_LAG = max(LAGS)
 SECONDS_PER_MINUTE = 60
 PULSE_SIZE_L = 0.5  # V100 meter pulse size, in liters
 
-#%%
+def segment_runs(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Start and end indices of the contiguous True runs in a 1D boolean array (half-open: mask[s:e] is all True)."""
+    mask = np.asarray(mask)
+    d = np.diff(mask.astype(np.int8))
+    starts = np.flatnonzero(d == 1) + 1
+    ends = np.flatnonzero(d == -1) + 1
+    if mask[0]:
+        starts = np.concatenate([[0], starts])
+    if mask[-1]:
+        ends = np.concatenate([ends, [len(mask)]])
+    return starts, ends
+
+
+def distribution_summary(x) -> dict:
+    """Count, mean, median, p90, p99 and max of x."""
+    x = np.asarray(x, dtype=np.float64)
+    return {
+        "count": int(len(x)),
+        "mean": float(x.mean()),
+        "median": float(np.median(x)),
+        "p90": float(np.percentile(x, 90)),
+        "p99": float(np.percentile(x, 99)),
+        "max": float(x.max()),
+    }
+
 
 def load_water() -> pd.DataFrame:
     """Load the raw water CSV and attach tz-aware UTC and local datetime columns, sorted by time."""
-    df = pd.read_csv(DATA_PATH)
+    df = pd.read_csv(RAW_CSV)
     df["datetime"] = pd.to_datetime(df["unix_ts"], unit="s", utc=True)
     df["datetime_local"] = df["datetime"].dt.tz_convert(LOCAL_TZ)
     return df.sort_values("unix_ts").reset_index(drop=True)
@@ -186,7 +205,6 @@ def check_v100_grid(v100: pd.DataFrame) -> dict:
         "span_days": float((v100["unix_ts"].iloc[-1] - v100["unix_ts"].iloc[0]) / 86400),
     }
 
-#%%
 
 def target_stats(target: pd.Series) -> dict:
     """
@@ -206,14 +224,12 @@ def target_stats(target: pd.Series) -> dict:
         "mean_daily_volume_L": float(target.sum() / (len(target) / 1440)),
     }
 
-#%%
 def event_stats(target: pd.Series) -> dict:
     """
     Characterize discrete water-use "events": contiguous runs of minutes
     with avg_rate > 0, separated by zero-flow gaps.
 
-    This describes event durations and volumes at native resolution, which
-    help interpret the measured zero proportions at coarser horizons.
+    Describes event durations and volumes at native resolution.
     """
     active = (target > 0).to_numpy()
     values = target.to_numpy(dtype=np.float64)
@@ -486,8 +502,7 @@ def main() -> None:
         },
     }
 
-    with open(OUT_DIR / "summary.json", "w") as f:
-        json.dump(to_serializable(summary), f, indent=2)
+    write_summary(OUT_DIR / "summary.json", summary)
 
     out = v100[["unix_ts", "datetime_local", "counter", "avg_rate"]].copy()
     out = out.set_index("unix_ts")  # unique, strictly monotone UTC master grid

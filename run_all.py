@@ -1,4 +1,4 @@
-"""Run the full pipeline in order: EDA -> features -> baselines -> diagnostic models (Stage 3) -> feature ablation (Stage 4) -> feature importance + residual ACF (Stage 5) -> test evaluation (Stage 6)."""
+"""Run the full pipeline in order (Stages 1-6); prediction plots are made separately with src/plot_predictions.py."""
 
 import subprocess
 import sys
@@ -6,10 +6,10 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent / "src"
 STAGES = [
-    "initial_eda.py",
+    "eda.py",
     "build_features.py",
     "baselines.py",
-    "diagnostic_models.py",
+    "compare_models.py",
     "feature_ablation.py",
     "feature_importance.py",
     "residual_acf.py",

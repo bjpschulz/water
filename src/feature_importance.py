@@ -1,33 +1,37 @@
 """
-Stage 5 feature importance (1-minute resolution): LightGBM, L2 and L1.
+Stage 5 feature importance: grouped TreeSHAP for LightGBM, L2 and L1.
 
 Each loss is fitted with the Stage 3 settings on train and analysed on the
 validation split (the test split is untouched), for two feature sets: all
-features (calendar + full lag set), to cross-check the Stage 4 ablation -- do
-the features it found redundant also rate low here? -- and the final set.
+features, to cross-check the Stage 4 ablation, and the final set.
 
-Importance is TreeSHAP via LightGBM's `predict(pred_contrib=True)`, reported per
-feature group: mean |contribution| of the group, from the row-wise summed
-contributions of its features (the lags are strongly correlated, so single-lag
-values are unstable), and the group's share of the total.
+TreeSHAP comes from LightGBM's `predict(pred_contrib=True)` and is reported per
+feature group: the mean |row-wise summed contribution| of the group's features
+(single-lag values are unstable because the lags are correlated), and the
+group's share of the total.
 
 Run: uv run python src/feature_importance.py
-Output: output/feature_importance/summary.json (groups are defined by FEATURE_SETS)
+Output: output/feature_importance/summary.json
 """
-
-from pathlib import Path
 
 import numpy as np
 
-from diagnostic_models import FEATURES_TREE, LGBM_OBJECTIVES, _xy, score, train_lgbm
-from feature_ablation import HOUR_SCALE, IMMEDIATE, SEASONAL
-from splits import load_features, split_series
-from ts_utils import write_summary
+from core.config import (
+    FEATURES_TREE,
+    FINAL_FEATURES,
+    HOUR_SCALE,
+    IMMEDIATE,
+    LOSSES,
+    OUTPUT_DIR,
+    SEASONAL,
+)
+from core.data import load_features, split_series, xy
+from core.evaluation import score, write_summary
+from core.models import train_lgbm
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_JSON = REPO_ROOT / "output" / "feature_importance" / "summary.json"
+OUT_JSON = OUTPUT_DIR / "feature_importance" / "summary.json"
 
-# Feature set -> (model columns, {group: member columns}).
+# Feature set -> (model columns, {group: member columns}); groups partition the columns.
 FEATURE_SETS = {
     "all_features": (
         FEATURES_TREE,
@@ -39,7 +43,7 @@ FEATURE_SETS = {
             "seasonal_lags": SEASONAL,
         },
     ),
-    "final": (["hour"] + IMMEDIATE, {"hour": ["hour"], "immediate_lags": IMMEDIATE}),
+    "final": (FINAL_FEATURES, {"hour": ["hour"], "immediate_lags": IMMEDIATE}),
 }
 
 
@@ -67,13 +71,13 @@ def main() -> None:
     """Fit each (loss, feature set), compute group SHAP importances on validation, save the summary."""
     splits = split_series(load_features())
     summary = {"split": "validation", "models": {}}
-    for suffix, objective in LGBM_OBJECTIVES.items():
-        name = f"lightgbm_{suffix}"
+    for loss in LOSSES:
+        name = f"lightgbm_{loss}"
         summary["models"][name] = {}
         for set_name, (columns, groups) in FEATURE_SETS.items():
-            X_train, y_train = _xy(splits["train"], columns)
-            X_valid, y_valid = _xy(splits["valid"], columns)
-            model = train_lgbm(X_train, y_train, objective)
+            X_train, y_train = xy(splits["train"], columns)
+            X_valid, y_valid = xy(splits["valid"], columns)
+            model = train_lgbm(X_train, y_train, loss)
             result = {
                 "valid": score(y_valid, model.predict(X_valid)),
                 "groups": shap_groups(model, X_valid, columns, groups),
@@ -82,7 +86,7 @@ def main() -> None:
             print_groups(f"{name} | {set_name}", result["groups"])
 
     write_summary(OUT_JSON, summary)
-    print(f"\nSaved {OUT_JSON.relative_to(REPO_ROOT)}")
+    print(f"\nSaved {OUT_JSON}")
 
 
 if __name__ == "__main__":

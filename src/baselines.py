@@ -1,86 +1,50 @@
-"""Evaluate Stage 2 naive baselines on the chronological validation split."""
+"""
+Stage 2: the five naive baselines on the validation split (no model fitting).
 
-from pathlib import Path
+The always-mean baseline uses the training mean only. The summary also records
+the split boundaries and the validation zero share, for the report.
+
+Run: uv run python src/baselines.py
+Output: output/baselines/summary.json and validation_predictions.parquet
+"""
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-from splits import load_features, split_series
-from ts_utils import write_summary
+from core.config import OUTPUT_DIR, TARGET
+from core.data import describe_splits, load_features, split_series
+from core.evaluation import score, write_summary
+from core.naive import DEFINITIONS, naive_forecasts
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = REPO_ROOT / "output" / "baselines"
-OUT_JSON = OUT_DIR / "summary.json"
-OUT_PREDICTIONS = OUT_DIR / "validation_predictions.parquet"
-TARGET = "avg_rate"
-
-# Lag baselines are read directly from the feature table's own lag_k
-# columns (built and self-checked in build_features.py) rather than
-# re-derived here -- lag_k[t] == avg_rate[t-k] is already guaranteed for
-# every row of the table before it's ever split, so recomputing it on the
-# validation slice would just be re-proving an invariant that's true by
-# construction.
-LAG_COLUMNS = {
-    "persistence": ("lag_1", "Predict avg_rate from 1 UTC-minute earlier"),
-    "seasonal_naive_daily": ("lag_1440", "Predict avg_rate from 1,440 UTC-minute rows earlier"),
-    "seasonal_naive_weekly": ("lag_10080", "Predict avg_rate from 10,080 UTC-minute rows earlier"),
-}
+OUT_DIR = OUTPUT_DIR / "baselines"
 
 
-def calculate_baselines(
-    splits: dict[str, pd.DataFrame],
-) -> tuple[dict, pd.DataFrame]:
-    """Calculate baseline metrics and return their validation predictions."""
-    train = splits["train"]
+def run(splits: dict[str, pd.DataFrame]) -> tuple[dict, pd.DataFrame]:
+    """Score every baseline on the validation split; return the summary and the predictions."""
     valid = splits["valid"]
-    y_train = train[TARGET].to_numpy(dtype=np.float64)
     y_valid = valid[TARGET].to_numpy(dtype=np.float64)
-    train_mean = float(y_train.mean())
+    train_mean = float(splits["train"][TARGET].mean())
+    preds = naive_forecasts(valid, train_mean)
 
-    predictions = {
-        "always_zero": (np.zeros(len(valid)), "Predict 0 L/min for every row"),
-        "always_mean": (
-            np.full(len(valid), train_mean),
-            "Predict the mean avg_rate from the training split",
-        ),
-    }
-    for name, (col, definition) in LAG_COLUMNS.items():
-        predictions[name] = (valid[col].to_numpy(dtype=np.float64), definition)
-
-    pred_frame = pd.DataFrame(
-        {
-            "unix_ts": valid.index.to_numpy(dtype=np.int64),
-            "actual": y_valid,
-            **{name: y_pred for name, (y_pred, _) in predictions.items()},
-        }
-    )
-
-    results = {
-        name: {
-            "mae": float(mean_absolute_error(y_valid, y_pred)),
-            "rmse": float(np.sqrt(mean_squared_error(y_valid, y_pred))),
-        }
-        for name, (y_pred, _) in predictions.items()
-    }
-    return {
+    summary = {
         "split": "validation",
+        "splits": describe_splits(splits),
         "train_target_mean": train_mean,
-        "baselines": results,
-    }, pred_frame
+        "valid_target_zero_share": float(np.mean(y_valid == 0)),
+        "definitions": DEFINITIONS,
+        "baselines": {name: score(y_valid, p) for name, p in preds.items()},
+    }
+    pred_frame = pd.DataFrame({"unix_ts": valid.index.to_numpy(dtype=np.int64), "actual": y_valid, **preds})
+    return summary, pred_frame
 
 
 def main() -> None:
-    """Run Stage 2 and save its reproducible summary."""
-    splits = split_series(load_features())
-    summary, predictions = calculate_baselines(splits)
-    write_summary(OUT_JSON, summary)
-    predictions.to_parquet(OUT_PREDICTIONS, index=False)
-    print(f"Saved {OUT_JSON.relative_to(REPO_ROOT)}")
-    for name, metrics in summary["baselines"].items():
-        print(
-            f"{name}: MAE={metrics['mae']:.6f}, RMSE={metrics['rmse']:.6f}"
-        )
+    """Run Stage 2 and save its summary and predictions."""
+    summary, predictions = run(split_series(load_features()))
+    write_summary(OUT_DIR / "summary.json", summary)
+    predictions.to_parquet(OUT_DIR / "validation_predictions.parquet", index=False)
+    for name, m in summary["baselines"].items():
+        print(f"{name:24s} MAE={m['mae']:.4f} RMSE={m['rmse']:.4f}")
 
 
 if __name__ == "__main__":

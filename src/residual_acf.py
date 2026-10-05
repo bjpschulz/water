@@ -1,11 +1,11 @@
 """
-Stage 5 residual ACF (1-minute resolution): how much temporal structure do the
-final LightGBM models leave unexplained?
+Stage 5 residual ACF: how much temporal structure do the final LightGBM
+models leave unexplained?
 
 Both losses (L2, L1) are fitted on the final feature set with the Stage 3
 settings on train; residuals y - y_hat are taken on the validation split (the
 test split is untouched) and their ACF is computed at the candidate lags
-(`ts_utils.LAGS`), next to the ACF of the target itself (no model) on the same window. The
+(`config.LAGS`), next to the ACF of the target itself on the same window. The
 validation slice is a contiguous 1-minute grid, so lags are exact.
 
 The +-1.96/sqrt(n) band is the white-noise reference only: with this many rows
@@ -17,8 +17,6 @@ Run: uv run python src/residual_acf.py
 Output: output/residual_acf/summary.json, figs/residual_acf.png (correlogram, lags 1-60)
 """
 
-from pathlib import Path
-
 import matplotlib
 
 matplotlib.use("Agg")
@@ -27,17 +25,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from statsmodels.tsa.stattools import acf
 
-from diagnostic_models import LGBM_OBJECTIVES, _xy, train_lgbm
-from feature_importance import FEATURE_SETS
-from splits import load_features, split_series
-from ts_utils import LAGS, write_summary
+from core.config import FINAL_FEATURES, LAGS, LOSSES, OUTPUT_DIR
+from core.data import load_features, split_series, xy
+from core.evaluation import write_summary
+from core.models import train_lgbm
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_JSON = REPO_ROOT / "output" / "residual_acf" / "summary.json"
-FIG_DIR = REPO_ROOT / "output" / "residual_acf" / "figs"
+OUT_JSON = OUTPUT_DIR / "residual_acf" / "summary.json"
+FIG_DIR = OUTPUT_DIR / "residual_acf" / "figs"
 PLOT_MAX_LAG = 60
-
-FINAL_COLUMNS = FEATURE_SETS["final"][0]
 
 
 def acf_curve(x: np.ndarray) -> np.ndarray:
@@ -79,14 +74,14 @@ def plot_correlogram(curves: dict[str, np.ndarray], band: float) -> None:
 def main() -> None:
     """Fit both losses, compute residual and target ACF on validation, save the summary."""
     splits = split_series(load_features())
-    X_train, y_train = _xy(splits["train"], FINAL_COLUMNS)
-    X_valid, y_valid = _xy(splits["valid"], FINAL_COLUMNS)
+    X_train, y_train = xy(splits["train"], FINAL_FEATURES)
+    X_valid, y_valid = xy(splits["valid"], FINAL_FEATURES)
 
     target_curve = acf_curve(y_valid)
     curves = {}
-    for suffix, objective in LGBM_OBJECTIVES.items():
-        model = train_lgbm(X_train, y_train, objective)
-        curves[f"lightgbm_{suffix}"] = acf_curve(y_valid - model.predict(X_valid))
+    for loss in LOSSES:
+        model = train_lgbm(X_train, y_train, loss)
+        curves[f"lightgbm_{loss}"] = acf_curve(y_valid - model.predict(X_valid))
 
     summary = {
         "split": "validation",
@@ -104,7 +99,7 @@ def main() -> None:
     for k in LAGS:
         row = " ".join(f"{summary['residual_acf'][n][str(k)]:14.4f}" for n in names)
         print(f"{k:6d} {summary['target_acf'][str(k)]:8.4f} {row}")
-    print(f"\nSaved {OUT_JSON.relative_to(REPO_ROOT)}")
+    print(f"\nSaved {OUT_JSON}")
 
 
 if __name__ == "__main__":

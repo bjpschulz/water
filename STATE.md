@@ -15,62 +15,46 @@ deliberately does **not** contain:
 Rules, protocol, and anything that shouldn't change session-to-session
 live in AGENTS.md, not here.
 
-Last updated: single test evaluation run; LightGBM tuning dropped (see AGENTS.md); feature importance
-(grouped TreeSHAP) and residual ACF scripts run. `tex/main.tex` is up to date with importance and
-residual ACF; L1 and L2 are both kept (AGENTS.md).
+Last updated: all pipeline stages (1–6) are done and the test split is spent.
+Remaining work is the report (discussion, literature, open `\todo`s) and the
+repository clean-up for grading. Solo project.
 
 ## Where we are
 
-EDA and feature derivation are complete: grid/integrity checks, meter
-transition, target distribution, event structure, temporal profiles
-(America/Vancouver local time), ACF (raw), timezone
-verification (emitted as the `timezone` block in summary.json), and a
-leakage-safe candidate feature set — all reproducible from
-`src/initial_eda.py` → `output/initial_eda/summary.json`.
+All stages run end to end via `run_all.py` (the prediction plotter
+`src/plot_predictions.py` is run by hand):
 
-The feature table itself is now built: lags (1–15, 30, 45, 60, 1440, 10080)
-plus calendar features in both raw and cyclic encodings (local
-time), warm-up NaN rows kept. Reproducible from `src/build_features.py`.
+- EDA and cleaning (`src/eda.py` → `output/eda/`).
+- Feature table: lags 1–15, 30, 45, 60, 1440, 10080 and calendar features in
+  raw and cyclic encodings, local time, warm-up NaN rows kept
+  (`src/build_features.py`).
+- Stage 1, splits (`src/core/data.py`): Monday-00:00-local boundaries (~70/15/15),
+  valid/test at full weekly cycles, warm-up rows excluded from train.
+  Downstream stages must obtain splits via `split_series()`.
+- Stage 2, naive baselines (`src/baselines.py`).
+- Stage 3, diagnostic models (`src/compare_models.py`): linear regression and
+  LightGBM, each L2 and L1, full feature set.
+- Stage 4, feature ablation (`src/feature_ablation.py`); final feature set in
+  AGENTS.md.
+- Stage 5, grouped TreeSHAP importance and residual ACF
+  (`src/feature_importance.py`, `src/residual_acf.py`), on validation.
+- Stage 6, single test evaluation (`src/test_evaluation.py`). The test split is
+  spent; no further modelling decision may be based on it.
 
-Stage 1 (chronological train/valid/test split) is built in `src/splits.py`:
-Monday-00:00-local-aligned boundaries (~70/15/15), valid/test at full weekly
-cycles, lag warm-up rows excluded from train. Downstream stages must obtain
-splits via `split_series()` — never re-derive boundaries.
+`tex/main.tex` is written up through Stage 6.
 
-Stage 2 (naive/rule baselines) is complete: all five baselines were
-evaluated on the chronological validation split using MAE and RMSE.
-Exact scores and split metadata are in `output/baselines/summary.json`.
+## Next steps
 
-Stage 3 (diagnostic models, `src/diagnostic_models.py`) is run on the
-validation split: linear regression and LightGBM, each under L2 and L1 (the
-Huber/Poisson variants were dropped, see AGENTS.md). The L2 fits are the plain
-diagnostic models. Results (all metrics, zero-prediction share) are in
-`output/diagnostic_models/summary.json`; both losses are kept (AGENTS.md). The earlier
-horizon-aggregation ablation was dropped; its script and results are archived
-in `archive/horizon_ablation/`. The test split has been evaluated once (Stage 6); it is spent.
-
-## Immediate next steps
-
-1. Feature importance (`src/feature_importance.py`, done: LightGBM L2 and L1,
-   Stage 3 settings, fitted on train, scored on validation, full and final
-   feature set, grouped TreeSHAP only); interpreted in `tex/main.tex`, where it
-   agrees with the ablation.
-2. Residual ACF (`src/residual_acf.py`, done: validation, final feature set,
-   both losses, table + correlogram); interpreted in `tex/main.tex`.
-3. Final test evaluation (`src/test_evaluation.py`, done once: LightGBM and
-   linear benchmark, each L2 and L1, fitted on train+valid on the final
-   features; all baselines; results in `output/test_evaluation/summary.json`).
-   Written up in `tex/main.tex`.
-4. Remaining: the discussion chapter, the literature, and the open `\todo`s in
-   `tex/main.tex`.
+1. Report: discussion chapter, related work and bibliography, the open
+   `\todo`s in `tex/main.tex`, Arial font, name and student ID.
+2. Repository clean-up for grading (README, code structure, what is committed).
+3. Finally, remove AGENTS.md and STATE.md.
 
 ## Report
 
-The final report is `tex/main.tex` (single file). It was rewritten to the current
-status through the test evaluation (Stage 6).
-Update it at milestones or new results, but only after asking and checking in
-with the user (AGENTS.md → "Living documentation"). Open `\todo{}` items mark
-what is still unwritten.
+The final report is `tex/main.tex` (single file). Update it only after asking
+and checking in with the user (AGENTS.md → "Living documentation"). Open
+`\todo{}` items mark what is still unwritten.
 
 ## Modelling target
 
@@ -79,13 +63,10 @@ known calendar features and earlier lags only.
 
 ## Active feature set
 
-Settled by the feature ablation (AGENTS.md): `hour` + `lag_1`–`lag_15`
-for all final-stage models, linear benchmark included (raw `hour`), taken from
-`output/build_features/whw_v100_with_features.parquet`, which keeps all
-columns (the Stage 3 diagnostic models still use the full set).
-
-Deliberately excluded: rolling statistics (AGENTS.md "Settled facts &
-scope decisions") and weather (scope, per AGENTS.md Research Constraints).
+`hour` + `lag_1`–`lag_15` for all final-stage models (AGENTS.md, settled
+facts). The feature table keeps all columns; the Stage 3 diagnostic models
+still use the full set. Rolling statistics are excluded (AGENTS.md); exogenous
+data such as weather are out of scope.
 
 ## Evaluation metric
 

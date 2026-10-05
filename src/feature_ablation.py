@@ -20,18 +20,16 @@ Output: output/feature_ablation/summary.json
 """
 
 import sys
-from pathlib import Path
 
 import pandas as pd
 
-from diagnostic_models import LAG_COLS, LGBM_OBJECTIVES, _xy, fit_lgbm, score
-from splits import load_features, split_series
-from ts_utils import write_summary
+from core.config import HOUR_SCALE, IMMEDIATE, LAG_COLS, LOSSES, OUTPUT_DIR, SEASONAL
+from core.data import load_features, split_series, xy
+from core.evaluation import score, write_summary
+from core.models import fit_lgbm
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_JSON = REPO_ROOT / "output" / "feature_ablation" / "summary.json"
+OUT_JSON = OUTPUT_DIR / "feature_ablation" / "summary.json"
 
-OBJECTIVES = {k: LGBM_OBJECTIVES[k] for k in ("l2", "l1")}
 BOLD, RESET = ("\033[1;36m", "\033[0m") if sys.stdout.isatty() else ("", "")
 
 CALENDAR_SETS = {
@@ -44,9 +42,6 @@ CALENDAR_SETS = {
     "dow_weekend": ["dow_local", "weekend"],
 }
 
-IMMEDIATE = [f"lag_{k}" for k in range(1, 16)]
-HOUR_SCALE = ["lag_30", "lag_45", "lag_60"]
-SEASONAL = ["lag_1440", "lag_10080"]
 LAG_SETS = {
     "all": LAG_COLS,
     "no_seasonal": IMMEDIATE + HOUR_SCALE,
@@ -77,15 +72,15 @@ def run(splits: dict[str, pd.DataFrame], title: str, sets: dict[str, list[str]])
     """Fit every set under both losses on train, score on valid, print one table per loss."""
     train, valid = splits["train"], splits["valid"]
     results = {}
-    for suffix, objective in OBJECTIVES.items():
-        model_name = f"lightgbm_{suffix}"
+    for loss in LOSSES:
+        model_name = f"lightgbm_{loss}"
         print(f"\n{BOLD}==== {title} | {model_name} ===={RESET}")
         print(f"{'feature set':28s} {'n_feat':>6s} {'MAE':>8s} {'RMSE':>8s} {'zero_pred':>10s}")
         results[model_name] = {}
         for name, columns in sets.items():
-            X_train, y_train = _xy(train, columns)
-            X_valid, y_valid = _xy(valid, columns)
-            res = {"n_features": len(columns), **score(y_valid, fit_lgbm(X_train, y_train, X_valid, objective))}
+            X_train, y_train = xy(train, columns)
+            X_valid, y_valid = xy(valid, columns)
+            res = {"n_features": len(columns), **score(y_valid, fit_lgbm(X_train, y_train, X_valid, loss))}
             results[model_name][name] = res
             print(
                 f"{name:28s} {res['n_features']:6d} {res['mae']:8.4f} {res['rmse']:8.4f} "
@@ -101,7 +96,7 @@ def main() -> None:
     for key, (title, sets) in ABLATIONS.items():
         summary[key] = run(splits, title, sets)
     write_summary(OUT_JSON, summary)
-    print(f"\nSaved {OUT_JSON.relative_to(REPO_ROOT)}")
+    print(f"\nSaved {OUT_JSON}")
 
 
 if __name__ == "__main__":

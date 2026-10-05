@@ -1,7 +1,7 @@
 [project]
 name = "water"
 version = "0.1.0"
-description = "Add your description here"
+description = "Forecasting one-minute residential water consumption (AMPds2) with LightGBM and naive baselines"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -16,3 +16,7 @@ dependencies = [
     "statsmodels>=0.15.0",
     "tzdata>=2026.3",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
