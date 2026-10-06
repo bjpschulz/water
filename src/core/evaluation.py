@@ -1,4 +1,4 @@
-"""Scoring (MAE, RMSE, zero share) and JSON stage summaries."""
+"""Scoring (MAE, RMSE, zero share) and JSON result summaries."""
 
 import json
 from pathlib import Path
@@ -35,7 +35,7 @@ def to_serializable(obj):
 
 
 def write_summary(path: Path, summary: dict) -> None:
-    """Write a stage summary as indented JSON (NaN is rejected)."""
+    """Write a result summary as indented JSON (NaN is rejected)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         json.dump(to_serializable(summary), f, indent=2, allow_nan=False)

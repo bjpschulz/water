@@ -1,13 +1,8 @@
 """
-Stage 3: compare model class and training loss (the diagnostic models).
+Diagnostic models: linear regression and LightGBM, each under an L2 and an L1
+loss, on calendar + all lags, fitted on train and scored on validation.
+Linear L1 is median regression; only the loss differs within a model class.
 
-A 2x2 design: linear regression and untuned LightGBM, each under an L2 and an
-L1 loss, on calendar + all lags; features, split, settings and seed are
-identical, only the loss changes. Linear: OLS (L2) vs. median regression (L1).
-Every fit is trained on train and scored on validation with MAE, RMSE and the
-share of exactly-zero predictions; no loss is paired with "its" metric.
-
-Run: uv run python src/compare_models.py
 Output: output/compare_models/summary.json and validation_predictions.parquet
 """
 
@@ -40,7 +35,6 @@ def run(splits: dict[str, pd.DataFrame]) -> tuple[dict, pd.DataFrame]:
 
 
 def main() -> None:
-    """Run Stage 3 and save its summary and predictions."""
     summary, predictions = run(split_series(load_features()))
     write_summary(OUT_DIR / "summary.json", summary)
     predictions.to_parquet(OUT_DIR / "validation_predictions.parquet", index=False)

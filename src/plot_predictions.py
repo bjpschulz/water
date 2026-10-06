@@ -1,12 +1,9 @@
 """
-Plot actual vs. predicted water consumption for one window of the validation or test split.
-
-Reads saved predictions, no refitting: validation = Stage 2 baselines + Stage 3
-models (all features, fitted on train); test = Stage 6 baselines + final models
-(hour + lags 1-15, fitted on train + valid).
+Plot actual vs. predicted values for one window of the validation split
+(baselines + diagnostic models) or the test split (baselines + final models),
+from saved predictions.
 
 Usage: uv run python src/plot_predictions.py --split test --week 2 --day 2 --hours 16-22
-Output: output/prediction_plots/<split>_week_..pdf
 """
 
 import argparse
@@ -29,7 +26,7 @@ SOURCES = {
     "valid": (
         [OUTPUT_DIR / "baselines" / "validation_predictions.parquet",
          OUTPUT_DIR / "compare_models" / "validation_predictions.parquet"],
-        "validation, Stage 3 models",
+        "validation, diagnostic models",
     ),
     "test": (
         [OUTPUT_DIR / "test_evaluation" / "test_predictions.parquet"],

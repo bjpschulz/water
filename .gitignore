@@ -12,6 +12,7 @@ wheels/
 # mac crap
 .DS_Store
 
+literature/
 tex/
 data/
 output/

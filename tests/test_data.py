@@ -14,7 +14,7 @@ def _frame(weeks: int = 40, warmup: int = 5) -> pd.DataFrame:
     return df
 
 
-def test_split_is_chronological_contiguous_and_complete_case():
+def test_split_is_chronological():
     df = _frame()
     s = split_series(df)
     joined = pd.concat([s["train"], s["valid"], s["test"]])
@@ -24,7 +24,7 @@ def test_split_is_chronological_contiguous_and_complete_case():
     assert s["train"].index[-1] < s["valid"].index[0] and s["valid"].index[-1] < s["test"].index[0]
 
 
-def test_valid_and_test_start_monday_midnight_local_with_full_weeks():
+def test_split_starts_on_monday():
     s = split_series(_frame())
     for name, weeks in (("valid", VALID_WEEKS), ("test", TEST_WEEKS)):
         first = s[name]["datetime_local"].iloc[0]

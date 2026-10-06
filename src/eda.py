@@ -1,16 +1,9 @@
 """
-Reproducible EDA and cleaning of the AMPds2 whole-house water (WHW) data, at
-native 1-minute resolution: integrity checks, the meter transition, target
-distribution, water-use events, local-time profiles and the autocorrelation.
+EDA and cleaning of the raw whole-house water data: integrity checks, meter
+transition, target distribution, water-use events, local-time profiles, ACF.
+Keeps the V100 period from V100_CLEAN_UNIX_TS onward as the analysis series.
 
-Run: uv run python src/eda.py
-
-Outputs:
-  output/eda/whw_v100.parquet  cleaned analysis period (1-min grid; index
-                               unix_ts, columns datetime_local, counter, avg_rate)
-  output/eda/whw_v100.csv      identical content as CSV, for inspection
-  output/eda/summary.json      all key numbers
-  output/eda/figs/*.png        figures
+Output: output/eda/whw_v100.parquet (+ .csv twin), summary.json, figs/
 """
 
 import json
@@ -70,8 +63,13 @@ def distribution_summary(x) -> dict:
 
 
 def load_water() -> pd.DataFrame:
-    """Load the raw water CSV and attach tz-aware UTC and local datetime columns, sorted by time."""
-    df = pd.read_csv(RAW_CSV)
+    """
+    Load the raw water CSV and attach tz-aware UTC and local datetime columns, sorted by time.
+    Rows the dataset authors filled in for missing readings carry a leading '+' on the timestamp.
+    """
+    df = pd.read_csv(RAW_CSV, dtype={"unix_ts": str})
+    df["filled_by_authors"] = df["unix_ts"].str.startswith("+")
+    df["unix_ts"] = df["unix_ts"].astype(np.int64)
     df["datetime"] = pd.to_datetime(df["unix_ts"], unit="s", utc=True)
     df["datetime_local"] = df["datetime"].dt.tz_convert(LOCAL_TZ)
     return df.sort_values("unix_ts").reset_index(drop=True)
@@ -94,6 +92,7 @@ def check_raw(df: pd.DataFrame) -> dict:
         .to_dict(),
         "unix_ts_monotone_increasing": bool(df["unix_ts"].is_monotonic_increasing),
         "duplicate_unix_ts": int(df["unix_ts"].duplicated().sum()),
+        "rows_filled_by_authors": int(df["filled_by_authors"].sum()),
         "n_rows_not_on_1min_grid": int(len(gaps)),
         "missing_minutes_total": int(
             (diffs[diffs > SECONDS_PER_MINUTE] / SECONDS_PER_MINUTE - 1).sum()
@@ -202,6 +201,8 @@ def check_v100_grid(v100: pd.DataFrame) -> dict:
         "regular_1min_grid": bool((diffs == SECONDS_PER_MINUTE).all()),
         "duplicate_unix_ts": int(v100["unix_ts"].duplicated().sum()),
         "missing_values": v100[["counter", "avg_rate", "inst_rate"]].isna().sum().to_dict(),
+        "rows_filled_by_authors": int(v100["filled_by_authors"].sum()),
+        "filled_rows_with_flow": int((v100["filled_by_authors"] & (v100["avg_rate"] > 0)).sum()),
         "span_days": float((v100["unix_ts"].iloc[-1] - v100["unix_ts"].iloc[0]) / 86400),
     }
 
@@ -511,7 +512,7 @@ def main() -> None:
 
     make_figures(v100, acf_result, daily)
 
-    print(json.dumps(to_serializable({k: summary[k] for k in ("raw", "meter_transition", "v100_grid", "target_stats", "events", "daily_volume", "longest_zero_runs", "acf")}), indent=2))
+    # print(json.dumps(to_serializable({k: summary[k] for k in ("raw", "meter_transition", "v100_grid", "target_stats", "events", "daily_volume", "longest_zero_runs", "acf")}), indent=2))
     print(f"\nWrote {PARQUET_PATH}")
     print(f"Wrote {CSV_PATH}")
     print(f"Wrote {OUT_DIR / 'summary.json'}")

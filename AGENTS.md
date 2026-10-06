@@ -111,8 +111,9 @@ never delete or rewrite one except to correct an error.
 - **`unix_ts` is true Unix/UTC time**, not local time encoded as UTC.
   Derived local timezone is America/Vancouver. Do not treat the naive UTC-derived hour-of-day as
   local time when building calendar features.
-  Reproducible via the `timezone` block in `output/eda/summary.json`
-  (`src/eda.py`).
+  Source: the AMPds2 data descriptor (Makonin et al. 2016, Data Records:
+  seconds since 1970-01-01 UTC; house in Burnaby, BC). The `timezone` block
+  in `output/eda/summary.json` only records this setting, it does not verify it.
 - **`counter` is redundant with `avg_rate`**
   (`avg_rate_t = counter_t - counter_{t-1}`, holds to ~1e-11 L) — retained
   only for validation, not as a model input.
@@ -327,14 +328,18 @@ Two documents, two jobs — plus the academic report, a third document.
   open decision resolves, its one-line summary moves to AGENTS.md's
   settled list and gets deleted from STATE.md, so nothing stays
   duplicated in both places.
-- **`tex/main.tex`**: the final academic report (single file, existing packages
-  only; do not add packages without need). It is the one place where
+- **`tex/main.tex`**: the final academic report (one .tex file plus
+  `tex/references.bib`, existing packages only; do not add packages without
+  need). Every reference in the .bib was checked against the publisher or Crossref. It is the one place where
   figures are restated by hand, each tagged with a `% source:` comment naming
   the `output/` file it came from. Update it when a milestone is reached or a
   result is produced, but **only after asking and checking in with the user
   first** — propose the change, wait for confirmation, never edit it
   unprompted. Keep it aligned with STATE.md/AGENTS.md (no dropped models,
-  stages or decisions left in it) and label hypotheses vs. measured results.
+  stages or decisions left in it). Keep measured results and their
+  interpretation distinct, but in natural prose: results as plain paragraphs,
+  explanations in `\paragraph{Interpretation.}` with ordinary hedging ("a likely
+  explanation, not tested here, ..."), never "Measured:"/"Hypothesis:" labels.
 - **`output/*/summary.json`** (and similar): the source of truth for
   exact numeric values, produced by reproducible scripts. Neither markdown
   file above should restate figures — cite the JSON path instead. A number
@@ -366,9 +371,12 @@ Two documents, two jobs — plus the academic report, a third document.
 - Docstrings (module and function) must be concise: what it does and any
   non-obvious convention, nothing more. No essay-style documentation.
 - Hard rule: never read git commits unless ordered — saves context and usage limits.
-- Only major scripts (pipeline stages producing measured output/artifacts)
-  get thorough documentation and a `output/<stage>/summary.json`. Helper
-  scripts stay minimal and write no JSON summary.
+- Module docstrings stay short (1-5 lines): what the script does, any
+  non-obvious convention, and its output path. The methodological rationale
+  lives in the report, the run instructions and layout in the README.
+- Every pipeline script has the same shape: docstring, constants, `run(splits)`
+  returning the results, an optional print helper, and `main()` (load, run,
+  save, print). Only pipeline scripts write an `output/<name>/summary.json`.
 - Save plots/results reproducibly rather than manually editing them.
 - Do not fabricate results; clearly label hypotheses vs measured results.
 - Keep the project scope focused on the research questions above.

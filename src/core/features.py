@@ -1,10 +1,4 @@
-"""
-Feature construction: lags of the target and calendar features in local time.
-
-Every feature is a deterministic row-wise transform (a backward shift of the
-target or a function of the timestamp), so the table can be built on the full
-series before splitting without leakage.
-"""
+"""Lag and calendar features; all are backward shifts or timestamp functions, so no leakage."""
 
 import numpy as np
 import pandas as pd

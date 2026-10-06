@@ -1,10 +1,7 @@
 """
-Stage 2: the five naive baselines on the validation split (no model fitting).
+The five naive baselines on the validation split (always-mean uses the training
+mean). Also records the split boundaries and the validation zero share.
 
-The always-mean baseline uses the training mean only. The summary also records
-the split boundaries and the validation zero share, for the report.
-
-Run: uv run python src/baselines.py
 Output: output/baselines/summary.json and validation_predictions.parquet
 """
 
@@ -39,7 +36,6 @@ def run(splits: dict[str, pd.DataFrame]) -> tuple[dict, pd.DataFrame]:
 
 
 def main() -> None:
-    """Run Stage 2 and save its summary and predictions."""
     summary, predictions = run(split_series(load_features()))
     write_summary(OUT_DIR / "summary.json", summary)
     predictions.to_parquet(OUT_DIR / "validation_predictions.parquet", index=False)

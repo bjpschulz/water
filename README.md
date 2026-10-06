@@ -20,27 +20,27 @@ src/
     models.py           linear regression (OLS / median) and LightGBM fitting
     naive.py            the five naive baselines
     evaluation.py       MAE / RMSE / zero share, JSON summaries
-  eda.py ... test_evaluation.py   one script per pipeline stage (table below)
+  eda.py ... test_evaluation.py   one script per pipeline step (table below)
   plot_predictions.py   plots of saved predictions
 tests/                  unit tests for src/core
-run_all.py              runs all stages in order
+run_all.py              runs all steps in order
 ```
 
-Stage scripts import only from `src/core/`, never from each other.
+Pipeline scripts import only from `src/core/`, never from each other.
 
 ## Pipeline
 
-| Stage | Script | Output |
+| Step | Script | Output |
 | --- | --- | --- |
 | EDA and cleaning | `src/eda.py` | `output/eda/` (cleaned series, summary, figures) |
 | Feature table | `src/build_features.py` | `output/build_features/` |
-| 1. Chronological split | `src/core/data.py` | used in memory by every later stage |
-| 2. Naive baselines | `src/baselines.py` | `output/baselines/` |
-| 3. Model and loss comparison (linear regression, LightGBM; L2 and L1) | `src/compare_models.py` | `output/compare_models/` |
-| 4. Feature ablation | `src/feature_ablation.py` | `output/feature_ablation/` |
-| 5. Feature importance (grouped TreeSHAP) | `src/feature_importance.py` | `output/feature_importance/` |
-| 5. Residual autocorrelation | `src/residual_acf.py` | `output/residual_acf/` |
-| 6. Single test evaluation | `src/test_evaluation.py` | `output/test_evaluation/` |
+| Chronological split | `src/core/data.py` | used in memory by every later step |
+| Naive baselines | `src/baselines.py` | `output/baselines/` |
+| Model and loss comparison (linear regression, LightGBM; L2 and L1) | `src/compare_models.py` | `output/compare_models/` |
+| Feature ablation | `src/feature_ablation.py` | `output/feature_ablation/` |
+| Feature importance (grouped TreeSHAP) | `src/feature_importance.py` | `output/feature_importance/` |
+| Residual autocorrelation | `src/residual_acf.py` | `output/residual_acf/` |
+| Single test evaluation | `src/test_evaluation.py` | `output/test_evaluation/` |
 
 ## Running
 
@@ -56,7 +56,7 @@ uv run pytest
 writes its exact results to `output/<step>/summary.json`.
 
 Prediction plots are made separately, from saved predictions (no refitting):
-the validation split shows the Stage 2 baselines and Stage 3 models, the test
+the validation split shows the baselines and the diagnostic models, the test
 split the baselines and the final models.
 
 ```sh

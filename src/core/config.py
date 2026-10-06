@@ -1,4 +1,4 @@
-"""Paths, feature sets and model settings shared by all pipeline stages."""
+"""Paths, feature sets and model settings shared by all pipeline scripts."""
 
 from pathlib import Path
 
@@ -19,11 +19,11 @@ IMMEDIATE = [f"lag_{k}" for k in range(1, 16)]
 HOUR_SCALE = ["lag_30", "lag_45", "lag_60"]
 SEASONAL = ["lag_1440", "lag_10080"]
 
-# Stage 3 feature sets: calendar + all lags; cyclic calendar for the linear model.
+# Feature sets of the diagnostic models: calendar + all lags; cyclic calendar for the linear model.
 FEATURES_LINEAR = ["hour_sin", "hour_cos", "dow_sin", "dow_cos", "weekend"] + LAG_COLS
 FEATURES_TREE = ["hour", "dow_local", "weekend"] + LAG_COLS
 
-# Final feature set, settled by the Stage 4 ablation; used by every final-stage model.
+# Final feature set, chosen by the feature ablation; used by every final model.
 FINAL_FEATURES = ["hour"] + IMMEDIATE
 
 # Untuned by design: fixed values and seed, no search.

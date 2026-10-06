@@ -1,14 +1,9 @@
 """
-Build the modelling feature table for the cleaned V100-period series.
+Feature table: the cleaned series plus all candidate lags and calendar features
+(see core/features.py). Leading rows with undefined lags are kept here and
+excluded from train by core.data.split_series.
 
-Columns: datetime_local, counter, avg_rate, then lag_1..lag_15, lag_30, lag_45,
-lag_60, lag_1440, lag_10080 and the calendar features hour, hour_sin, hour_cos,
-dow_local, dow_sin, dow_cos, weekend (see core/features.py). The leading rows
-with undefined lags are kept; core.data.split_series excludes them from train.
-
-Run: uv run python src/build_features.py
-Output: output/build_features/whw_v100_with_features.parquet (index unix_ts)
-        and an identical .csv twin, for skimming
+Output: output/build_features/whw_v100_with_features.parquet (+ .csv twin)
 """
 
 import pandas as pd
@@ -36,7 +31,6 @@ def load_v100() -> pd.DataFrame:
 
 
 def main() -> None:
-    """Build the feature table, check it and save it."""
     src = load_v100()
     df = add_calendar(add_lags(src))
 
