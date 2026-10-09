@@ -45,8 +45,10 @@ All stages run end to end via `run_all.py` (the prediction plotter
 
 ## Next steps
 
-1. Report: discussion chapter, related work and bibliography, the open
-   `\todo`s in `tex/main.tex`, Arial font, name and student ID.
+1. Report: Ch.5 drafted. Built with pdflatex (`latexmk -pdf`), Computer Modern;
+   Arial lines are commented out in the preamble pending the teacher's answer.
+   Open: the remaining `\todo`s in `tex/main.tex` (zero/non-zero breakdown,
+   negative predictions, efficiency), front matter, figures into `tex/images/`.
 2. Repository clean-up for grading (README, code structure, what is committed).
 3. Finally, remove AGENTS.md and STATE.md.
 

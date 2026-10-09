@@ -11,7 +11,7 @@
 %     (see \graphicspath below); copy them into images/ before submission.
 %
 % Pre-submission checklist (deadline 15 Oct 2026, 23:59):
-%   [ ] Arial font, 11 or 12 pt        [ ] name + Matrikelnummer on front page
+%   [ ] Arial font, 11 or 12 pt       [ ] name + Matrikelnummer on front page
 %   [ ] public GitHub link in report   [ ] consistent bibliography style
 %   [ ] word count >= 2000 (solo project)      [ ] delete every \todo
 % ==================================================
@@ -23,6 +23,11 @@
 % ==================================================
 
 \usepackage[utf8]{inputenc}
+
+% Arial (course requirement, pending confirmation): uncomment and build with
+%   latexmk -lualatex main.tex   (then remove the inputenc line above)
+% \usepackage{fontspec}
+% \setmainfont{Arial}
 
 % Math
 \usepackage{amsmath}
@@ -53,7 +58,7 @@
 \usepackage{algpseudocode}
 
 % Colors
-\usepackage{xcolor}
+\usepackage{xcolor} 
 
 % ==================================================
 % Header / Footer
@@ -96,12 +101,6 @@
 \hypersetup{hidelinks}
 \newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
 
-% The course asks for Arial. Computer Modern (the default) is not Arial.
-% Helvetica-clone option (needs two extra package lines, so left off):
-%   \usepackage[T1]{fontenc}
-%   \usepackage[scaled=.92]{helvet}
-%   \renewcommand{\familydefault}{\sfdefault}
-% Exact Arial: compile with XeLaTeX/LuaLaTeX and use fontspec.
 
 \title{\textbf{Residential Water Consumption Forecasting\\ under Extreme Zero-Inflation}\\[1.5ex]
 \large Temporal Autocorrelation, Naive Baselines and Diagnostic Models on AMPds2}
@@ -118,20 +117,15 @@
 \chapter{Introduction}
 % ==================================================
 
-\section{Problem}
-
-Forecasting the water consumption of a single house is a time-series problem with an unusual difficulty. At fine temporal resolution, residential water use is not a smooth signal but a sequence of short events (a tap is opened, a toilet is flushed, a machine fills) separated by long periods without any flow. In the AMPds2 water-meter series analysed here, the volume measured per minute is exactly zero in 85.5\% of the minutes of the analysis period (86.5\% in the validation split), and the median one-minute value is zero.
+Forecasting the water consumption of a single house is a time-series problem with an unusual difficulty.
+At fine temporal resolution, residential water use is not a smooth signal but a sequence of short events (a tap is opened, a toilet is flushed, a machine fills) separated by long periods without any flow.
+In the AMPds2 water-meter series \citep{makonin2016ampds} analysed here, the volume is measured \emph{minutely}, and is exactly zero in 85.5\% of the minutes of the analysis period.
 % source: output/eda/summary.json -> target_stats.zero_proportion, target_stats.quantiles.p50; output/baselines/summary.json -> valid_target_zero_share
+This extreme zero-inflation matters for both modelling and evaluation. The target distribution is far from Gaussian; the conditional mean often lies in a region that is rarely realised;
+and the two standard error metrics, MAE and RMSE, favour different predictors, so a model can look better or worse depending on the metric.
+% Temporal dependence adds a second difficulty: consecutive minutes are statistically dependent, so any evaluation in which future information can influence past predictions would be misleading.
 
-This extreme zero-inflation matters for both modelling and evaluation. The target distribution is far from Gaussian; the conditional mean often lies in a region that is rarely realised; and the two standard error metrics, MAE and RMSE, favour different predictors, so a model can look better or worse depending on the metric. Temporal dependence adds a second difficulty: consecutive minutes are statistically dependent, so any evaluation in which future information can influence past predictions would be misleading.
-
-\section{Motivation}
-
-Short-term consumption forecasts, and an understanding of what makes water use predictable, are relevant for demand management and smart-metering analytics \citep{cominola2015smartmeters}, and potentially for detecting anomalies such as leaks. Beyond the application, the dataset is a compact test case for a general machine-learning question: how to model and evaluate a target whose predictability is concentrated in rare, high-magnitude events, where the choice of training loss and evaluation metric can lead to contradictory conclusions (Chapter~\ref{chap:results}).
-
-\section{Research questions}
-
-The project addresses four questions:
+Short-term consumption forecasts, and an understanding of what makes water use predictable, are relevant for demand management and smart-metering analytics \citep{cominola2015smartmeters}, and potentially for detecting anomalies such as leaks. Beyond the application, the dataset is a compact test case for a general machine-learning question: how to model and evaluate a target whose predictability is concentrated in rare, high-magnitude events, where the choice of training loss and evaluation metric can lead to contradictory conclusions. The project addresses four research questions:
 \begin{enumerate}
     \item How well can water consumption be predicted with one or two ML models?
     \item Which features are most important?
@@ -139,47 +133,53 @@ The project addresses four questions:
     \item How can its effect be handled or exploited without temporal leakage?
 \end{enumerate}
 
-\section{Approach}
-
-Methodological choices were made one at a time, each based on an experiment on the validation split rather than fixed in advance. The prediction task is kept at the native one-minute resolution of the data. Aggregating the target to coarser blocks was considered and rejected, because it changes the prediction problem rather than the model, so that gains over the baselines would not be comparable.
-
-The workflow consists of data inspection and cleaning, feature construction, a chronological split, naive baselines, four diagnostic models (linear regression and LightGBM, each under an L2 and an L1 loss), a two-step feature ablation that fixes the final feature set (the hour plus lags 1--15), a grouped TreeSHAP feature-importance analysis and a residual autocorrelation check, all evaluated on the validation split. The final models (LightGBM and a linear benchmark on the final features, each under both losses) were evaluated once on the test split.
+The prediction task is kept at the native one-minute resolution of the data; aggregating the target to coarser blocks was considered and rejected, because it changes the prediction problem rather than the model. Linear regression and LightGBM, each trained under an L2 and an L1 loss, are compared with naive baselines on a chronological validation split. A feature ablation fixes the final feature set, a grouped TreeSHAP analysis and a residual autocorrelation check follow, and the final models are evaluated once on the test split. Each methodological choice was based on an experiment on the validation split rather than fixed in advance.
 
 % ==================================================
 \chapter{Related Work}
+\label{chap:related}
 % ==================================================
 
-\section{Residential water demand and smart metering}
+\paragraph{Water demand and smart metering.} Most of the water demand forecasting literature serves utilities.
+\citet{donkor2014urban} review urban demand
+forecasting studies published between 2000 and 2010 and organise them
+from long-term capacity planning to short-term operation;
+the forecast target being almost always demand aggregated over a city or zone.
+Smart water meters have shifted attention to the individual household: \citet{cominola2015smartmeters}
+review how high-resolution smart-meter data are used to characterise end uses such as showers, toilets and washing machines,
+to disaggregate the total flow into these uses, and to design demand-management strategies.
+AMPds2 \citep{makonin2016ampds} is such a smart meter dataset and 
+records electricity, water and natural-gas consumption of one house at one-minute resolution over two years.
+It was designed mainly for electricity research such as non-intrusive load monitoring,
+but its authors also list demand forecasting and time-series analysis among its intended uses.
 
-Most of the water demand forecasting literature has been written for utilities. \citet{donkor2014urban} review urban demand forecasting studies published between 2000 and 2010 and organise them by the planning decision they support, from long-term capacity planning to short-term operation; the forecast target is almost always demand aggregated over a city, a pressure zone or a network. Smart water meters have shifted attention to the individual household. \citet{cominola2015smartmeters} review how high-resolution smart-meter data are used for residential demand modelling and management: to characterise end uses (showers, toilets, washing machines), to disaggregate the total flow into these uses, and to design customised demand-management strategies.
+\paragraph{Losses and error measures.} Which forecast counts as best depends on how
+its errors are measured. Judged by the squared error (RMSE), the best single guess for
+an uncertain value is its average; judged by the absolute error (MAE), it is its middle
+value, the median \citep{gneiting2011point}. A model trained with the L2 loss therefore
+aims at the average and one trained with the L1 loss at the median (called median regression \citep{koenker1978quantiles}).
+For the present zero-inflated water consumption data this is decisive:
+If flow occurs in only, say, two out of ten otherwise similar minutes, the
+median of the next minute is zero while its average is positive, so MAE rewards
+predicting zero, RMSE rewards predicting a small amount, and the two metrics can rank the
+same forecasts in opposite order, as will be seen later on.
 
-AMPds2 \citep{makonin2016ampds} is a public dataset that records the electricity, water and natural gas consumption of one house at one-minute resolution for two years. It was designed mainly for electricity research such as non-intrusive load monitoring, but its authors also list demand forecasting and time-series analysis among its intended uses. On the water side, the authors and their colleagues have used it to disaggregate household water use with the help of the electricity sub-meters, as described in the data descriptor.
+\paragraph{Temporal evaluation and leakage.} Random cross-validation is unsuitable for time series because it lets future observations
+into training; more generally, leakage is any use of information in training that would not be available
+at prediction time \citep{kaufman2012leakage}. It can  easily enter through careless preprocessing and feature construction,
+and must be avoided.
 
-\section{Intermittent and zero-inflated targets}
+\paragraph{Gradient boosting and interpretation.} LightGBM makes gradient-boosted decision trees efficient on large datasets through histogram-based split finding and leaf-wise tree growth \citep{ke2017lightgbm,lightgbmdocs}, and supports several training objectives, among them the squared and the absolute error \citep{lightgbmdocs}. Tree ensembles can be explained with TreeSHAP \citep{lundberg2020trees}, which computes exact Shapley-value attributions of each prediction to the features in polynomial time. Whether a fitted model has left temporal structure in its residuals is usually checked with the residual autocorrelation function, either descriptively or with a portmanteau test such as the one of \citet{ljung1978}.
 
-A series in which most periods have no demand at all is called intermittent. The classic forecasting approach is the method of \citet{croston1972}, which forecasts the size of non-zero demands and the interval between them separately, by exponential smoothing. \citet{syntetos2005accuracy} compare Croston's method with simple benchmarks and a bias-corrected variant on several thousand intermittent series, and discuss which error measures remain meaningful when many actual values are zero. Intermittent-demand methods target the average demand rate over a horizon, typically for inventory control, and not the exact period in which demand occurs.
-
-In regression, an excess of zeros is usually handled by a two-part structure. Zero-inflated models \citep{lambert1992zip} mix a point mass at zero with a count distribution, and hurdle models separate the decision \emph{whether} there is flow from the model for \emph{how much}. Both motivate a question that runs through this project: how far a single-stage regression model, trained with a standard loss, can go on a target that is exactly zero in most minutes.
-
-\section{Point forecasts, losses and error measures}
-
-A point forecast is only well defined relative to the error measure used to judge it. \citet{gneiting2011point} shows that the squared error is minimised by the mean of the predictive distribution and the absolute error by its median, and that comparing forecasts with a measure that does not match the requested functional can be misleading. For zero-inflated data this is decisive: the median is often exactly zero while the mean is positive, so MAE and RMSE can rank the same forecasts in opposite order. The L1 loss corresponds to median (quantile) regression, introduced by \citet{koenker1978quantiles}. \citet{hyndman2006accuracy} discuss the strengths and weaknesses of common accuracy measures and propose scaled errors such as MASE for comparisons across series with different scales. The textbook of \citet{hyndman2021fpp3} recommends always comparing models with simple benchmark methods such as the naive and the seasonal-naive forecast.
-
-\section{Temporal evaluation and leakage}
-
-Standard $k$-fold cross-validation assumes exchangeable observations, which time series violate. \citet{bergmeir2012cv} study this problem for machine-learning predictors and recommend blocked forms of cross-validation; \citet{hyndman2021fpp3} describe evaluation on a rolling forecasting origin. More generally, \citet{kaufman2012leakage} define leakage as the use of information in model training that would not be legitimately available at prediction time, and show how easily it enters through preprocessing and feature construction. For lag-based forecasting models, the main sources of leakage are random splits, which put the future into the training set, and preprocessing steps fitted on the whole series.
-
-\section{Gradient boosting and model interpretation}
-
-Gradient-boosted decision trees are a strong default for tabular regression. LightGBM makes them efficient on large datasets through histogram-based split finding and leaf-wise tree growth \citep{ke2017lightgbm,lightgbmdocs}, and supports several training objectives, among them the squared and the absolute error \citep{lightgbmdocs}. Tree ensembles can be explained with TreeSHAP \citep{lundberg2020trees}, which computes exact Shapley-value attributions of each prediction to the features in polynomial time. Whether a fitted model has left temporal structure in its residuals is usually checked with the residual autocorrelation function, either descriptively or with a portmanteau test such as the one of \citet{ljung1978}.
-
-\section{Research gap}
-
-Within the literature reviewed here, forecasting studies work either with aggregated urban demand at coarse resolution \citep{donkor2014urban}, or, for smart-meter data, focus on characterising and disaggregating end uses \citep{cominola2015smartmeters}. The intermittent-demand literature, in turn, forecasts average rates for inventory decisions rather than the next minute. This project addresses the gap between them: forecasting the water consumption of a single house one minute ahead, at the native resolution of the meter, with a modern machine-learning model, evaluated chronologically against naive and seasonal-naive baselines, and reporting how the training loss and the choice between MAE and RMSE change the conclusion when most minutes are exactly zero. The literature search behind this chapter is not exhaustive, so the gap is stated for the works reviewed here.
-
-\section{Model and workflow choice}
-
-LightGBM is chosen as the main model because it captures non-linear effects and interactions of lagged values without manual feature engineering, trains quickly on several hundred thousand rows, and supports both the L2 and the L1 objective with otherwise identical settings. A linear regression (ordinary least squares and median regression) serves as a simple benchmark. Interpretability and the autocorrelation question matter more here than the number of models, so no further model classes are added. Calendar features and lagged consumption are kept as separate feature groups so that an ablation can attribute the predictive performance to either, and TreeSHAP is used as a second, model-internal view of feature importance.
+\paragraph{Research gap and choice of model.} Within the literature reviewed here, forecasting studies work either with aggregated
+urban demand at coarse resolution \citep{donkor2014urban} or, for smart-meter data, focus on characterising and disaggregating end uses
+\citep{cominola2015smartmeters}. This project addresses the gap between them: forecasting the water consumption of a single house one minute ahead,
+at the native resolution of the meter, with a modern machine-learning model, evaluated chronologically against naive and seasonal-naive baselines,
+and reporting how the training loss and the choice between MAE and RMSE change the conclusion when most minutes are exactly zero.
+Beware that the literature search was not exhaustive in the short amount of time for the project, so the gap is stated for the works reviewed here.
+LightGBM is chosen as the main model because it captures non-linear effects and interactions of lagged values, while supporting the L2 and the L1 objective
+with otherwise identical settings; linear regression serves as a simple benchmark. Calendar features and lagged consumption are kept as separate groups
+so that an ablation can attribute the predictive performance to either.
 
 % ==================================================
 \chapter{Data and Methodology}
@@ -262,7 +262,7 @@ All features are deterministic row-wise transforms, either backward shifts of th
 \centering
 \caption{Candidate feature set. Lag $k$ at time $t$ equals \texttt{avg\_rate} at $t-k$ minutes.}
 \label{tab:features}
-\begin{tabular}{@{}p{3.2cm}p{5.6cm}p{4.6cm}@{}}
+\begin{tabular}{@{}p{3.2cm}p{5.0cm}p{6.0cm}@{}}
 \toprule
 Group & Columns & Note \\
 \midrule
@@ -270,7 +270,7 @@ Immediate lags & \texttt{lag\_1} to \texttt{lag\_15} (every lag) & steepest ACF 
 Hour-scale lags & \texttt{lag\_30}, \texttt{lag\_45}, \texttt{lag\_60} & \\
 Daily/weekly lags & \texttt{lag\_1440}, \texttt{lag\_10080} & 24\,h and 168\,h ACF bumps \\
 Calendar (raw) & \texttt{hour}, \texttt{dow\_local}, \texttt{weekend} & local time; tree model \\
-Calendar (cyclic) & \texttt{hour\_sin}, \texttt{hour\_cos}, \texttt{dow\_sin}, \texttt{dow\_cos} & linear model \\
+Calendar (cyclic) & \texttt{hour\_sin}, \texttt{hour\_cos},\newline \texttt{dow\_sin}, \texttt{dow\_cos} & linear model \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -306,7 +306,7 @@ Models are compared by the mean absolute error and the root mean squared error o
 \qquad
 \mathrm{RMSE}=\sqrt{\frac1n\sum_{t}(y_t-\hat y_t)^2},
 \end{equation}
-both in L/min. Among constant predictions, MAE is minimised by the median of the target and RMSE by its mean. With a median of zero, always-zero is the MAE-optimal constant and always-mean the RMSE-optimal constant, so both metrics are compared against both constants. No model is ranked on a single metric. A scaled error such as MASE is not used: with a single series at a single fixed resolution, it would only divide the MAE by a constant. The share of exactly-zero predictions is reported alongside, since it shows whether a model behaves like a zero-or-flow classifier.
+both in L/min. Among constant predictions, MAE is minimised by the median of the target and RMSE by its mean. With a median of zero, always-zero is the MAE-optimal constant and always-mean the RMSE-optimal constant, so both metrics are compared against both constants. No model is ranked on a single metric. A scaled error such as MASE \citep{hyndman2006accuracy} is not used: with a single series at a single fixed resolution, it would only divide the MAE by a constant. The share of exactly-zero predictions is reported alongside, since it shows whether a model behaves like a zero-or-flow classifier.
 
 \section{Naive baselines}
 
@@ -331,7 +331,7 @@ Two model classes are fitted on the training split with the calendar and full la
 \paragraph{LightGBM.} A gradient-boosted decision-tree regressor. Trees are added sequentially, each fitted to the errors of the current ensemble, using histogram-based, leaf-wise tree growth. It captures non-linear effects and feature interactions. The configuration is untuned: 100 trees, 31 leaves per tree, learning rate 0.1, random seed 42, on the raw calendar features and the twenty lags, with the objectives \texttt{regression\_l2} and \texttt{regression\_l1}.
 % source: src/core/config.py (LGBM_PARAMS, LGBM_OBJECTIVES)
 
-An earlier iteration of this stage additionally ran LightGBM with a Huber and a Poisson objective. They were dropped because they are loss-shape variants that do not answer a research question (the Huber scale parameter is arbitrary, and the Poisson objective is a count-data convenience on a target on a 0.5~L grid); they are not reported here.
+LightGBM was also run once with a Huber and a Poisson objective; both were dropped as loss-shape variants that answer no research question (the Huber scale parameter is arbitrary, and the Poisson objective is a count-data convenience on a target on a 0.5~L grid).
 
 \section{Feature ablation protocol}
 \label{sec:ablation_protocol}
@@ -352,7 +352,7 @@ A small LightGBM grid over the number of leaves, the minimum child size and the 
 \section{Feature importance}
 \label{sec:importance_method}
 
-Importance is computed with TreeSHAP (LightGBM's \texttt{pred\_contrib} option), which splits each prediction exactly into one additive contribution per feature plus a constant. Both losses are fitted on the training split, and contributions are evaluated on the validation split, for two feature sets: all features (calendar and the full lag set), to cross-check the ablation, and the final set. The lags are strongly correlated, so the credit a model splits among them is arbitrary and single-lag values are unstable; importance is therefore reported per feature group (immediate lags, hour-scale lags, seasonal lags, hour, day of week with the weekend indicator), as the mean absolute value of the group's summed contributions and as its share of the total. The groups partition the features of one fitted model; they are the blocks of the ablation, but unlike the ablation's overlapping candidate sets they must not overlap.
+Importance is computed with TreeSHAP (LightGBM's \texttt{pred\_contrib} option), which splits each prediction exactly into one additive contribution per feature plus a constant. Both losses are fitted on the training split, and contributions are evaluated on the validation split, for two feature sets: all features (calendar and the full lag set), to cross-check the ablation, and the final set. The lags are strongly correlated, so the credit a model splits among them is arbitrary and single-lag values are unstable (for the same reason, individual linear-regression coefficients are not interpreted); importance is therefore reported per feature group (immediate lags, hour-scale lags, seasonal lags, hour, day of week with the weekend indicator), as the mean absolute value of the group's summed contributions and as its share of the total. The groups partition the features of one fitted model; they are the blocks of the ablation, but unlike the ablation's overlapping candidate sets they must not overlap.
 
 \section{Residual autocorrelation}
 \label{sec:residual_method}
@@ -367,7 +367,7 @@ The final models were fixed before the test split was evaluated: LightGBM with t
 
 \section{Reproducibility, code and data}
 
-The code is organised as one script per pipeline stage under \path{src/}. Shared functionality lives in the package \path{src/core/}: paths and feature sets, data loading and the chronological split, feature construction, model fitting, the naive baselines and scoring. Stages import only from \path{src/core/}, never from each other. In pipeline order, the stages are \path{eda.py}, \path{build_features.py}, \path{baselines.py}, \path{compare_models.py}, \path{feature_ablation.py}, \path{feature_importance.py}, \path{residual_acf.py} and \path{test_evaluation.py}. \path{run_all.py} runs them in this order, and each stage writes its exact results to a \path{summary.json} in its own folder under \path{output/}. Prediction plots are drawn from the saved predictions by \path{plot_predictions.py}. Unit tests under \path{tests/} check the lag construction (including that no feature depends on later values) and the chronological split. The Python environment is pinned with uv (\path{uv.lock}). The raw data file is included in the repository and can also be obtained from the AMPds2 release \citep{makonin2015dataverse}. \todo{public GitHub URL}
+The code is organised as one script per pipeline stage under \path{src/}. Shared functionality lives in the package \path{src/core/}: paths and feature sets, data loading and the chronological split, feature construction, model fitting, the naive baselines and scoring. Stages import only from \path{src/core/}, never from each other; \path{run_all.py} runs them in order, and each writes its exact results to a \path{summary.json} in its own folder under \path{output/}, from which every number in this report is taken. Unit tests under \path{tests/} check the lag construction (including that no feature depends on later values) and the chronological split. The Python environment is pinned with uv (\path{uv.lock}). The raw data file is included in the repository and can also be obtained from the AMPds2 release \citep{makonin2015dataverse}. \todo{public GitHub URL}
 
 % ==================================================
 \chapter{Results}
@@ -413,13 +413,13 @@ Within each model class, switching from the L2 to the L1 loss lowers the MAE and
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{valid_week_02.pdf}
-\caption{Actual and predicted \texttt{avg\_rate} for the second validation week, for the always-zero rule, persistence and the four diagnostic models.}
+\includegraphics[width=\textwidth]{valid_week_02_day_2_tuesday_hours_16-22.pdf}
+\caption{Actual and predicted \texttt{avg\_rate} on Tuesday of the second validation week (8 October 2013), 16:00--22:00 local time, for the always-zero rule, persistence and the four diagnostic models. Persistence repeats each value one minute late; LightGBM (L1) predicts exactly zero between events, while both L2 models keep a small positive prediction.}
 \label{fig:week}
 \end{figure}
-% source: output/prediction_plots/valid_week_02.pdf (src/plot_predictions.py --split valid --week 2)
+% source: output/prediction_plots/valid_week_02_day_2_tuesday_hours_16-22.pdf (src/plot_predictions.py --split valid --week 2 --day 2 --hours 16-22)
 
-\paragraph{Interpretation.} The difference follows from what each loss estimates. The L1 loss targets the conditional median, which is zero whenever flow is less likely than not, and a tree model can represent this as a zero-or-flow rule; this would explain its high zero share and its low MAE. The L2 loss targets the conditional mean and therefore always leaves a small positive prediction on zero minutes. That offset is cheap in RMSE but costs MAE on the majority of minutes, which are exactly zero. A breakdown of the error by true-zero and true-nonzero minutes would confirm this explanation. \todo{run the zero/non-zero error breakdown in a script that writes to output/}
+\paragraph{Interpretation.} The difference follows from what each loss estimates. The L1 loss targets the conditional median, which is zero whenever flow is less likely than not, and a tree model can represent this as a zero-or-flow rule; this would explain its high zero share and its low MAE. The L2 loss targets the conditional mean and therefore always leaves a small positive prediction on zero minutes. That offset is cheap in RMSE but costs MAE on the majority of minutes, which are exactly zero. A breakdown of the error by true-zero and true-nonzero minutes would confirm this explanation. \todo{run the zero/non-zero error breakdown in a script that writes to output/} Neither the linear nor the tree model enforces non-negative predictions under the L2 loss. \todo{measure the share and magnitude of negative predictions in a script that writes to output/, or drop this sentence}
 
 The weak seasonal-naive results are most likely due to event timing not repeating at the exact minute across days or weeks, so a same-minute lag mostly predicts flow at the wrong time. This concerns the same-minute lag as a point predictor, not the presence of daily and weekly structure in the ACF.
 
@@ -487,7 +487,8 @@ Under both losses, the dense immediate block is better than the sparse-hour set 
 \label{sec:final_features}
 
 The dense immediate block clearly matters: the sparse-hour set and persistence only are 6.4\% and 6.8\% worse in MAE than the immediate block under L2.
-% source: output/feature_ablation/summary.json -> lags_with_hour.lightgbm_l2.{immediate,sparse_hour,persistence}.mae; percentages computed from the JSON values On top of the hour and lags 1--15, in contrast, the hour-scale lags, the daily and weekly lags, the day of week and the weekend indicator add less than 0.2\% under L2 and nothing measurable under L1. Following the principle of the simplest set within a negligible margin of the best set on both metrics and both losses, the final feature set is the \textbf{hour plus lags 1--15} (16 features). This is a judgement against a practical tolerance on a single validation window, not a significance test.
+% source: output/feature_ablation/summary.json -> lags_with_hour.lightgbm_l2.{immediate,sparse_hour,persistence}.mae; percentages computed from the JSON values
+On top of the hour and lags 1--15, in contrast, the hour-scale lags, the daily and weekly lags, the day of week and the weekend indicator add less than 0.2\% under L2 and nothing measurable under L1. Following the principle of the simplest set within a negligible margin of the best set on both metrics and both losses, the final feature set is the \textbf{hour plus lags 1--15} (16 features). This is a judgement against a practical tolerance on a single validation window, not a significance test.
 
 \paragraph{Interpretation.} The daily and weekly lags add nothing beyond the hour and the short lags although the ACF has daily and weekly bumps. A plausible reason is that the hour already encodes the diurnal pattern and that the weekly pattern of this house is weak (Figure~\ref{fig:profiles}). Two ablation results support this indirectly: under L2, the seasonal lags together with the hour score close to the hour alone (MAE 0.8472 versus 0.8521, Table~\ref{tab:lag_ablation}), and the day of week alone scores close to the always-mean baseline (Table~\ref{tab:cal_ablation}).
 
@@ -499,6 +500,7 @@ Table~\ref{tab:shap} gives the mean absolute TreeSHAP value per feature group (i
 \begin{table}[t]
 \centering
 \small
+\setlength{\tabcolsep}{4pt}
 \caption{Mean absolute TreeSHAP value per feature group, LightGBM, validation split, with share of the total in brackets. A dash means the group is not in the model; 0 means the trees never split on the group.}
 \label{tab:shap}
 \begin{tabular}{@{}lrrrr@{}}
@@ -566,7 +568,7 @@ The L1 residuals are a different object. Their positive autocorrelation cannot c
 \section{Test evaluation}
 \label{sec:test}
 
-Table~\ref{tab:test_results} gives the single evaluation of the final models and the baselines on the test split, following the protocol in Section~\ref{sec:test_method}. Figure~\ref{fig:test_week} shows their predictions for one test week.
+Table~\ref{tab:test_results} gives the single evaluation of the final models and the baselines on the test split, following the protocol in Section~\ref{sec:test_method}. Figure~\ref{fig:test_week} shows their predictions for one evening of the test split.
 
 \begin{table}[t]
 \centering
@@ -593,21 +595,47 @@ LightGBM (L1) & final & \textbf{0.3975} & 1.4219 & 0.850 \\
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{test_week_02.pdf}
-\caption{Actual and predicted \texttt{avg\_rate} for the second test week: the always-zero rule, persistence and the four final models (hour and lags 1--15, fitted on the training plus validation splits). Same week position and layout as Figure~\ref{fig:week}.}
+\includegraphics[width=\textwidth]{test_week_02_day_2_tuesday_hours_16-22.pdf}
+\caption{Actual and predicted \texttt{avg\_rate} on Tuesday of the second test week (7 January 2014), 16:00--22:00 local time: the always-zero rule, persistence and the four final models (hour and lags 1--15, fitted on the training plus validation splits). Same window position and layout as Figure~\ref{fig:week}.}
 \label{fig:test_week}
 \end{figure}
-% source: output/prediction_plots/test_week_02.pdf (src/plot_predictions.py --split test --week 2)
+% source: output/prediction_plots/test_week_02_day_2_tuesday_hours_16-22.pdf (src/plot_predictions.py --split test --week 2 --day 2 --hours 16-22)
 
 As on the validation split, no predictor is best on both metrics: LightGBM (L2) has the lowest RMSE and LightGBM (L1) the lowest MAE. All four models beat all five baselines on RMSE, the best baseline being persistence. On MAE, both L1 models beat persistence and every other baseline; of the L2 models, LightGBM is below always-zero but above persistence, and linear regression is only just below always-zero. Under each loss, LightGBM is better than the linear benchmark on both metrics, by a small margin on RMSE under L1 (1.4219 against 1.4292). LightGBM (L1) predicts exactly zero in 85.0\% of the minutes, close to the 84.8\% of minutes that are truly zero.
 
 \paragraph{Interpretation.} The validation findings carry over to unseen data: the trade-off between the L1 and the L2 loss, the high zero share of the L1 tree model, and the fact that only the L1 models beat persistence on MAE all reappear on the test split. All errors, including those of the baselines, are higher than on validation; since the MAE of the always-zero rule equals the mean consumption of the window (0.574 on test against 0.500 on validation), error levels are not comparable across windows, and models should be compared against the baselines within a window. That LightGBM beats the linear benchmark under both losses suggests that the tree captures non-linear structure in the recent lags, although this was not tested directly. The linear benchmark makes little use of the hour (see Section~\ref{sec:test_method}), which should be kept in mind when reading the comparison.
 
-The feature-importance and residual-autocorrelation analyses (Sections~\ref{sec:importance} and~\ref{sec:residual_acf}) use fits on the training split only, because they need data the model was not trained on; the test models use the training plus validation splits with the same features and settings. Neither analysis was repeated for the test fit. The test result is a single 13-week window without a variability estimate, so very small differences, such as that between the two L1 models on RMSE, are not interpreted.
+% ==================================================
+\chapter{Discussion and Conclusion}
+% ==================================================
 
-\section{Summary by research question}
+\section{Discussion}
 
-Validation split unless stated otherwise.
+\paragraph{Suitability of the approach.} For the problem studied here, one-minute-ahead forecasting at the native resolution of the meter, the untuned LightGBM was adequate: under each loss it beat every naive baseline on RMSE and the linear models on both metrics, and under the L1 loss it also beat persistence on MAE, on the validation and the test split alike. The margin over persistence is moderate, however, and no model is best on both metrics. The central finding is therefore less about the model class than about the loss. On a target that is exactly zero in most minutes, the L2 and the L1 loss produce two different forecasters, one that never predicts zero and one that behaves almost like a zero-or-flow classifier, and MAE and RMSE each favour one of them. Which one is suitable depends on the use: if forecasts are summed to volumes over longer periods, the conditional mean (L2) is the appropriate target, because means add up and medians do not; if the question is whether water is flowing at all, the L1 model is closer to that decision. The prediction plots (Figures~\ref{fig:week} and~\ref{fig:test_week}) suggest that both mainly predict the continuation of an event that has already started, while the onset of an event, when the recent lags are still zero, is largely missed. This reading of the figures has not been quantified.
+
+\paragraph{Other approaches.} A two-part (hurdle) model, which separates the question \emph{whether} there is flow from \emph{how much}, is the natural next step for this target. It would estimate the probability of flow in the next minute and, separately, the volume given flow; their product gives the conditional mean, and the probability can be thresholded for a zero-or-flow decision, so one model would serve both uses that the L2 and the L1 fits now serve separately. As both parts would draw on the same recent lags, it would not be expected to solve the problem of unpredictable event onsets; this is an expectation, not a result. A probabilistic forecast, for example quantile regression at several quantiles \citep{koenker1978quantiles}, would extend the L1 model and make the tension between mean and median explicit instead of forcing a choice between two point forecasts \citep{gneiting2011point}.
+
+\paragraph{Industrial use.} A one-minute forecast for a single house has little direct value on its own; it is more likely to be useful as a building block. Aggregated over many households, such forecasts could support short-term network operation \citep{donkor2014urban}. At the household level, a model of normal consumption can flag sustained flow at times when it expects none, a simple form of leak detection, and can inform demand-management strategies \citep{cominola2015smartmeters}. Making the approach available to others would require a real-time data feed from the meter instead of a static file, validation on more than one house (or a single model trained across households), regular retraining as behaviour changes, monitoring of the forecast error, and an interface that serves predictions instead of batch scripts. \todo{efficiency: one sentence, pending decision} Most of the pipeline could be reused on another meter of this kind; the meter-specific cleaning, such as the start of the analysis period, would have to be adapted.
+
+\paragraph{Links to other topics.} The problem is closely related to non-intrusive load monitoring, the main use of AMPds2 \citep{makonin2016ampds}. Appliances such as dishwashers and washing machines draw both power and water, so the electricity sub-meters of the same house could serve as exogenous features that announce water use before it starts, which is exactly the event onset that the lags cannot anticipate. The hourly weather data in AMPds2 are a further candidate, more for seasonal than for minute-level variation. Both were outside the scope of this project. More generally, the tension between loss and metric found here applies to any zero-inflated regression target.
+
+\paragraph{Lessons learned.} On the data side, much of the effort went into understanding the data before any modelling: the meter replacement, the time zone of the timestamps and the fact that the meter serves two households only became clear from the data descriptor and from checking the raw values, and each of them changed the analysis period or the features. On the modelling side, simple baselines proved hard to beat (persistence beats the L2 LightGBM on MAE), and the choice of loss changed the picture at least as much as the choice between the two model classes. On the software side, it paid off to write one script per stage that saves its results to a JSON file, so that every number in this report can be traced and reproduced, to cover the leakage-prone steps (lag construction and split) with unit tests, and to settle each methodological decision with an experiment before fixing it.
+
+\section{Limitations}
+\label{sec:limitations}
+
+\begin{itemize}
+    \item A single house, a single chronological validation window and a single 13-week test window. There is no rolling-origin repetition and hence no estimate of variability across periods, so differences of a few thousandths, as in parts of the ablation or between the two L1 models on test RMSE, are not distinguishable from noise. Whether the results transfer to other households is unknown.
+    \item The final feature set was chosen against a practical tolerance on the validation window, with the calendar settled before the lags rather than in a full grid. The LightGBM configuration is untuned; a small tuning grid changed validation scores negligibly, so the comparison is not optimised over hyperparameters.
+    \item Feature importance and the residual autocorrelation are descriptive results of single training-only fits on the validation window, whereas the test models are fitted on training plus validation data. TreeSHAP describes one fitted model and is reported per group because the lags are correlated; the residual check covers linear dependence only, and its white-noise band is a reference line, not a test.
+    \item The autocorrelation analysis that motivated the candidate lags (Figure~\ref{fig:acf}) used the whole analysis period, including the validation and test windows. The final lag set was chosen on the validation split only, so the effect is limited to which lags were offered as candidates.
+    \item Point forecasts only, at one-minute resolution by design; the regression models do not enforce non-negativity, and no probabilistic or two-part structure is used.
+\end{itemize}
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+The answers to the four research questions are summarised below (validation split unless stated otherwise).
 \begin{itemize}
     \item \textbf{RQ1, predictability.} No model is best on both metrics (Table~\ref{tab:main_results}). LightGBM beats every baseline on RMSE under both losses, and under the L2 loss it lowers the RMSE of the best baseline, persistence, by 15.3\%. On MAE it beats persistence only under the L1 loss, by 19.2\%. Under the L2 loss its MAE lies between persistence and always-zero. The linear benchmark shows the same loss-dependent pattern at a higher error level. The test split repeats the pattern (Table~\ref{tab:test_results}): 13.9\% lower RMSE than persistence for LightGBM (L2) and 18.1\% lower MAE for LightGBM (L1). How useful the forecasts are therefore depends on which metric matters for the application.
     \item \textbf{RQ2, importance.} For LightGBM, recent consumption (lags 1--15) dominates, the hour comes second, and everything else is negligible (Table~\ref{tab:shap}). Ablation and TreeSHAP point the same way. This is a consistency check rather than independent confirmation: both use the same model class and validation window, and under L1 the redundant features are simply never used by the trees.
@@ -616,45 +644,11 @@ Validation split unless stated otherwise.
 \end{itemize}
 % source: RQ1 percentages computed from output/baselines/summary.json, output/compare_models/summary.json and output/test_evaluation/summary.json (persistence vs. lightgbm_l1 MAE, lightgbm_l2 RMSE)
 
-\section{Further observations}
-
-Neither the linear nor the tree model enforces non-negative predictions under the L2 loss. \todo{measure the share and magnitude of negative predictions in a script that writes to output/, or drop this sentence} With many mutually correlated lag features, individual linear-regression coefficients should not be interpreted causally; importance is therefore assessed on feature groups for the tree model (Section~\ref{sec:importance}).
-
-\section{Open items}
-
-\begin{itemize}
-    \item \todo{Efficiency: training and prediction time versus accuracy, if relevant.}
-\end{itemize}
-
-% ==================================================
-\chapter{Discussion and Conclusion}
-% ==================================================
-
-\todo{Not written yet. Prompts, following the course requirements:}
-
-\begin{itemize}
-    \item \todo{Critical evaluation of the approach and model performance; was the model suitable for the identified research problem?}
-    \item \todo{Which results would be expected from other approaches in the literature (e.g.\ hurdle or intermittent-demand methods)?}
-    \item \todo{Industrial usability, and what would be needed to make the approach available to others.}
-    \item \todo{Synergies and links to other topics.}
-    \item \todo{Short review: what was learned about the data, the models and software development.}
-\end{itemize}
-
-\section{Limitations already identified}
-\label{sec:limitations}
-
-\begin{itemize}
-    \item A single house and a single chronological validation window; no rolling-origin repetition, so no estimate of variability across periods, and ablation differences of a few thousandths are not distinguishable from noise.
-    \item LightGBM hyperparameters are left at their defaults; a small tuning grid changed validation scores negligibly and was dropped, so the model comparison is not optimised over hyperparameters.
-    \item The final feature set was chosen on a single validation window against a practical tolerance, without a variability estimate across periods or training windows, and with calendar settled before lags (not a full grid).
-    \item Feature importance and the residual autocorrelation are descriptive results of single fits on one validation window. TreeSHAP describes one fitted model and is reported per group because the lags are correlated; the residual autocorrelation covers linear dependence only, and its white-noise band is a reference line, not a test.
-    \item The test result is a single 13-week window, so it comes without a variability estimate. The test models are fitted on the training plus validation splits, while the importance and residual analyses use training-only fits.
-    \item The autocorrelation analysis that motivated the candidate lag set (Figure~\ref{fig:acf}) was computed on the whole analysis period, including the validation and test windows. The final lag set was chosen on the validation split only, so the effect is limited to which lags were offered as candidates.
-    \item Point forecasts only; the regression models do not enforce non-negativity, and no probabilistic or two-part structure is used.
-    \item All results are at native one-minute resolution, by design.
-\end{itemize}
+Taken together, one-minute water consumption in this house is predictable mainly from the last quarter hour of consumption and the hour of day. How well it is predictable depends on whether the forecast is judged by MAE or by RMSE, so the training loss should be chosen to match the error measure that matters for the application.
 
 \bibliographystyle{plainnat}
+\begingroup\raggedright
 \bibliography{references}
+\endgroup
 
 \end{document}
